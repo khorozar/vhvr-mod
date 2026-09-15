@@ -959,7 +959,10 @@ namespace ValheimVRMod.Patches
             // Do not simply stop the VideoPlayer: callers use this callback to continue the startup,
             // dream, or gameplay flow. Completing it here preserves vanilla sequencing without showing
             // a video which cannot be comfortably skipped from the pre-VR startup screen.
-            if (VHVRConfig.SkipCinematics())
+            // The startup cinematic runs before VR and owns the transition that creates the main menu.
+            // Calling its callback synchronously skips that transition altogether. Once VR is active,
+            // cinematics can be completed immediately without that lifecycle hazard.
+            if (VHVRConfig.SkipCinematics() && VRPlayer.instance != null)
             {
                 onStop?.Invoke(video, true);
                 __result = true;

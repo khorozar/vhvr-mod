@@ -373,7 +373,7 @@ namespace ValheimVRMod.Utilities
             skipCinematics = config.Bind("General",
                                          "SkipCinematics",
                                          true,
-                                         "Skips intro, dream and other video cinematics. Disable this only when you want to watch a cinematic.");
+                                         "Skips video cinematics after VR has started, such as dreams and in-game scenes. Disable this only when you want to watch one.");
             disableRecenterPose = config.Bind("General",
                                           "DisableRecenterPose",
                                           false,
