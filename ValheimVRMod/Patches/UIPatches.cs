@@ -954,14 +954,14 @@ namespace ValheimVRMod.Patches
             return !VHVRConfig.NonVrPlayer() && VRPlayer.instance != null && CinematicsManager.s_instance != null;
         }
 
-        static bool Prefix(CinematicsManager.VideoEntry video, CinematicsManager.VideoCompleteAction onComplete, ref bool __result)
+        static bool Prefix(CinematicsManager.VideoEntry video, CinematicsManager.VideoCompleteAction onStop, ref bool __result)
         {
             // Do not simply stop the VideoPlayer: callers use this callback to continue the startup,
             // dream, or gameplay flow. Completing it here preserves vanilla sequencing without showing
             // a video which cannot be comfortably skipped from the pre-VR startup screen.
             if (VHVRConfig.SkipCinematics())
             {
-                onComplete?.Invoke(video, true);
+                onStop?.Invoke(video, true);
                 __result = true;
                 return false;
             }
