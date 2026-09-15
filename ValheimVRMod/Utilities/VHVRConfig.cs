@@ -36,6 +36,7 @@ namespace ValheimVRMod.Utilities
         private static ConfigEntry<float> headOffsetThirdPersonY;
         private static ConfigEntry<bool> enableHeadReposition;
         private static ConfigEntry<bool> recenterOnStart;
+        private static ConfigEntry<bool> skipCinematics;
         private static ConfigEntry<bool> roomscaleFadeToBlack;
         private static ConfigEntry<bool> disableRecenterPose;
         private static ConfigEntry<bool> immersiveShipCameraSitting;
@@ -369,6 +370,10 @@ namespace ValheimVRMod.Utilities
                                           "RecenterOnStart",
                                           true,
                                           "Set this to true if you want tracking to be automatically re-centered when the game first starts up.");
+            skipCinematics = config.Bind("General",
+                                         "SkipCinematics",
+                                         true,
+                                         "Skips intro, dream and other video cinematics. Disable this only when you want to watch a cinematic.");
             disableRecenterPose = config.Bind("General",
                                           "DisableRecenterPose",
                                           false,
@@ -1335,6 +1340,11 @@ namespace ValheimVRMod.Utilities
         public static bool RecenterOnStart()
         {
             return recenterOnStart.Value;
+        }
+
+        public static bool SkipCinematics()
+        {
+            return skipCinematics.Value;
         }
 
         public static bool RoomscaleFadeToBlack()
