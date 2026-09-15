@@ -405,7 +405,7 @@ namespace ValheimVRMod.VRCore.UI {
 
             tabButtons.GetComponent<TabHandler>().m_tabs.Add(tab);
 
-            Transform content = CreateScrollableContent(newTab, section.Value.Count);
+            Transform content = CreateScrollableContent(newTab.gameObject, section.Value.Count);
             float contentHeight = content.GetComponent<RectTransform>().rect.height;
             int row = 0;
 
