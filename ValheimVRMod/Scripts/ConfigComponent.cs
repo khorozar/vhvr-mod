@@ -15,41 +15,30 @@ namespace ValheimVRMod.Scripts {
         public UnityAction<string> saveAction;
         public string value;
         public string helpText;
-        private string originalValue;
-
-        public void BeginPreview()
-        {
-            if (originalValue == null)
-            {
-                originalValue = configValue.Value.GetSerializedValue();
-            }
-        }
+        // Key bindings are committed by Valheim's separate binding dialog. Other controls
+        // preview directly into their ConfigEntry and must not be overwritten by a stale
+        // duplicate control when the settings dialog closes.
+        public bool usesDeferredSaveAction;
 
         // Apply immediately so VR settings can be judged while the player is looking at
         // the body, HUD, or menu. ConfigSettings owns the session and restores this value
         // on Back, so previewing never commits a half-finished adjustment to disk.
         public void Preview(string serializedValue)
         {
-            BeginPreview();
             value = serializedValue;
             configValue.Value.SetSerializedValue(serializedValue);
         }
 
         public void FinishPreview(bool save)
         {
-            BeginPreview();
             if (save)
             {
                 // Key bindings still use their dedicated save action; live controls
                 // have already written their current value to the same ConfigEntry.
-                if (!string.IsNullOrEmpty(value) && saveAction != null)
+                if (usesDeferredSaveAction && !string.IsNullOrEmpty(value) && saveAction != null)
                 {
                     saveAction(value);
                 }
-            }
-            else
-            {
-                configValue.Value.SetSerializedValue(originalValue);
             }
         }
 

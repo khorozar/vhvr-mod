@@ -406,7 +406,7 @@ namespace ValheimVRMod.Utilities
             // Eye-height calibration is stored in rig-local units. Recalculate it as
             // soon as the player changes world scale, rather than retaining an offset
             // measured at a different scale and shifting the camera into the body.
-            worldScale.SettingChanged += ((o, i) => VRPlayer.RequestRecentering());
+            worldScale.SettingChanged += ((o, i) => VRPlayer.ApplyWorldScale());
 
 
             headOffsetX = config.Bind("General",

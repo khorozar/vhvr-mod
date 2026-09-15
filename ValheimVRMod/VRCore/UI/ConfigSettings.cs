@@ -46,6 +46,7 @@ namespace ValheimVRMod.VRCore.UI {
         private static TMP_Text toolTipText;
         private static Image toolTipBackground;
         private static bool previewSaveOnConfigSet;
+        private static Dictionary<ConfigEntryBase, string> previewOriginalValues;
 
         private class SettingsPage
         {
@@ -264,6 +265,11 @@ namespace ValheimVRMod.VRCore.UI {
             doSave = false;
             previewSaveOnConfigSet = VHVRConfig.config.SaveOnConfigSet;
             VHVRConfig.config.SaveOnConfigSet = false;
+            previewOriginalValues = new Dictionary<ConfigEntryBase, string>();
+            foreach (var entry in VHVRConfig.config)
+            {
+                previewOriginalValues[entry.Value] = entry.Value.GetSerializedValue();
+            }
             settings.AddComponent<SettingsCloneMarker>();
             settings.transform.Find("Panel").Find("Title").GetComponent<TMP_Text>().text = MenuName;
             createSettingsHelp(settings.transform.Find("Panel"));
@@ -399,28 +405,50 @@ namespace ValheimVRMod.VRCore.UI {
 
             tabButtons.GetComponent<TabHandler>().m_tabs.Add(tab);
 
-            int posX = 0;
-            int posY = 235;
-            
-            if (section.Value.Count > 18) {
-                posX = -200;
-            }
-            
-            // iterate all config entries of current section and create elements 
+            Transform content = CreateScrollableContent(newTab, section.Value.Count);
+            float contentHeight = content.GetComponent<RectTransform>().rect.height;
+            int row = 0;
+
+            // One scrollable column keeps descriptions readable and avoids the overlap
+            // caused by wrapping long pages into two narrow columns.
             foreach (KeyValuePair<string, ConfigEntryBase> configValue in section.Value) {
-                
-                if (! createElement(configValue, newTab, new Vector2(posX, posY), section.Key)) {
+                var position = new Vector2(0, contentHeight * 0.5f - 42f - row * 68f);
+                if (! createElement(configValue, content, position, section.Key)) {
                     continue;
                 }
-                
-                posY -= (int)SETTINGS_ENTRY_HEIGHT;
-                if (posY < -245) {
-                    posY = 235;
-                    posX = 250;
-                }
+                row++;
             }
 
             tabCounter++;
+        }
+
+        private static Transform CreateScrollableContent(GameObject page, int entryCount)
+        {
+            var viewport = new GameObject("SettingsViewport", typeof(RectTransform), typeof(RectMask2D));
+            viewport.transform.SetParent(page.transform, false);
+            var viewportRect = viewport.GetComponent<RectTransform>();
+            viewportRect.anchorMin = Vector2.zero;
+            viewportRect.anchorMax = Vector2.one;
+            viewportRect.offsetMin = new Vector2(18, 18);
+            viewportRect.offsetMax = new Vector2(-18, -48);
+
+            var content = new GameObject("SettingsContent", typeof(RectTransform));
+            content.transform.SetParent(viewport.transform, false);
+            var contentRect = content.GetComponent<RectTransform>();
+            contentRect.anchorMin = new Vector2(0, 1);
+            contentRect.anchorMax = new Vector2(1, 1);
+            contentRect.pivot = new Vector2(0.5f, 1);
+            contentRect.sizeDelta = new Vector2(0, Mathf.Max(520f, entryCount * 68f + 42f));
+            contentRect.anchoredPosition = Vector2.zero;
+
+            var scrollRect = page.GetComponent<ScrollRect>() ?? page.AddComponent<ScrollRect>();
+            scrollRect.viewport = viewportRect;
+            scrollRect.content = contentRect;
+            scrollRect.horizontal = false;
+            scrollRect.vertical = true;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
+            scrollRect.verticalNormalizedPosition = 1f;
+            return content.transform;
         }
 
         private static void createControlsTab(int tabCount)
@@ -580,7 +608,6 @@ namespace ValheimVRMod.VRCore.UI {
         {
             component.configValue = entry;
             component.helpText = GetHelpText(entry);
-            component.BeginPreview();
         }
 
         private static GameObject createTabButtonPrefab(GameObject vanillaObject)
@@ -619,8 +646,9 @@ namespace ValheimVRMod.VRCore.UI {
             slider.minValue = float.Parse(type.GetProperty("MinValue").GetValue(acceptableValues).ToString());
             slider.maxValue =  float.Parse(type.GetProperty("MaxValue").GetValue(acceptableValues).ToString());
             var isFloat = acceptableValues.ValueType == typeof(float);
-            var increment = isFloat ? GetSliderIncrement(slider.minValue, slider.maxValue) : 1f;
-            slider.value = SnapToIncrement(float.Parse(configValue.Value.GetSerializedValue(), CultureInfo.InvariantCulture), slider.minValue, increment);
+            var increment = isFloat ? GetSliderIncrement(configValue.Key, slider.minValue, slider.maxValue) : 1f;
+            // Opening the menu must not invoke a listener and rewrite an existing value.
+            slider.SetValueWithoutNotify(SnapToIncrement(float.Parse(configValue.Value.GetSerializedValue(), CultureInfo.InvariantCulture), slider.minValue, increment));
             var text = slider.transform.Find("Value").GetComponent<TMP_Text>();
             text.text = FormatSliderValue(slider.value, increment);
 
@@ -656,6 +684,13 @@ namespace ValheimVRMod.VRCore.UI {
             {
                 component.FinishPreview(save);
             }
+            if (!save && previewOriginalValues != null)
+            {
+                foreach (var originalValue in previewOriginalValues)
+                {
+                    originalValue.Key.SetSerializedValue(originalValue.Value);
+                }
+            }
             VHVRConfig.config.SaveOnConfigSet = previewSaveOnConfigSet;
             if (save)
             {
@@ -663,6 +698,7 @@ namespace ValheimVRMod.VRCore.UI {
             }
             GameObject.Destroy(settings);
             settings = null;
+            previewOriginalValues = null;
         }
 
         private static Dictionary<string, KeyValuePair<string, ConfigEntryBase>> GetRuntimeConfigEntries()
@@ -715,10 +751,12 @@ namespace ValheimVRMod.VRCore.UI {
             createTabForSection(new KeyValuePair<string, Dictionary<string, ConfigEntryBase>>("Advanced", entries), sectionCount);
         }
 
-        private static float GetSliderIncrement(float min, float max)
+        private static float GetSliderIncrement(string key, float min, float max)
         {
-            // In VR, hundredths make sliders painfully slow and do not improve ordinary
-            // gameplay adjustments. The dedicated height-calibration mode remains smooth.
+            if (key == "WorldScale" || key == "PlayerHeightAdjust")
+            {
+                return 0.01f;
+            }
             return 0.1f;
         }
 
@@ -878,8 +916,9 @@ namespace ValheimVRMod.VRCore.UI {
 
             var is3Axis = false;
             ConfigEntry<Quaternion> confRot;
-            if (!VHVRConfig.config.TryGetEntry(sectionName, configValue.Key + "Rot", out confRot)) {
-                Debug.LogError(configValue.Key + "Rot not found (in " + sectionName + " section), will only read Vector3 Axis");
+            var configSection = configValue.Value.Definition.Section;
+            if (!VHVRConfig.config.TryGetEntry(configSection, configValue.Key + "Rot", out confRot)) {
+                Debug.LogError(configValue.Key + "Rot not found (in " + configSection + " section), will only read Vector3 Axis");
                 is3Axis = true;
             }
             var transformButton = GameObject.Instantiate(transformButtonPrefab, parent);
@@ -1014,6 +1053,7 @@ namespace ValheimVRMod.VRCore.UI {
             configComponent.saveAction = param => {
                 configValue.Value.SetSerializedValue(param);
             };
+            configComponent.usesDeferredSaveAction = true;
 
             keyBinding.transform.Find("Label").GetComponent<TMP_Text>().text = GetDisplayName(configValue.Key);
             keyboardMouseSettings.m_keys.Add(new KeySetting {m_keyName = configValue.Key, m_keyTransform = keyBinding.GetComponent<RectTransform>()});

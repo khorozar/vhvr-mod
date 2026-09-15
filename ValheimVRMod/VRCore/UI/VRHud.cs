@@ -82,6 +82,7 @@ namespace ValheimVRMod.VRCore.UI
         private Quaternion cameraHudRotation;
         private Quaternion cameraHudRotation2;
         private bool cameraHudRotationInitialized;
+        private bool cameraHudRotation2Initialized;
 
         // Left Wrist Canvas
         private Canvas leftHudCanvas;
@@ -303,12 +304,12 @@ namespace ValheimVRMod.VRCore.UI
         private void setCameraHudPosition() {
             float canvasWidth = cameraHudCanvas.GetComponent<RectTransform>().rect.width;
             float scaleFactor = 0.1f / canvasWidth * VHVRConfig.CameraHudScale();
-            setCameraHudAnchor(cameraHudCanvasParent.transform, ref cameraHudRotation);
+            setCameraHudAnchor(cameraHudCanvasParent.transform, ref cameraHudRotation, ref cameraHudRotationInitialized);
             float hudDistance = 1f;
             float hudVerticalOffset = -0.5f;
-            cameraHudCanvasParent.transform.localPosition = new Vector3(VHVRConfig.CameraLockedPos().x, hudVerticalOffset + VHVRConfig.CameraLockedPos().y, hudDistance);
+            var localOffset = new Vector3(VHVRConfig.CameraLockedPos().x, hudVerticalOffset + VHVRConfig.CameraLockedPos().y, hudDistance);
+            cameraHudCanvasParent.transform.position += cameraHudCanvasParent.transform.rotation * localOffset;
             cameraHudCanvas.GetComponent<RectTransform>().localScale = Vector3.one * scaleFactor * hudDistance * VHVRConfig.CameraLockedPos().z;
-            cameraHudCanvasParent.transform.localRotation = Quaternion.Euler(Vector3.zero);
             cameraHudCanvasGroup.alpha = 1f;
             
         }
@@ -317,17 +318,17 @@ namespace ValheimVRMod.VRCore.UI
         {
             float canvasWidth = cameraHudCanvas2.GetComponent<RectTransform>().rect.width;
             float scaleFactor = 0.1f / canvasWidth * VHVRConfig.CameraHudScale();
-            setCameraHudAnchor(cameraHudCanvasParent2.transform, ref cameraHudRotation2);
+            setCameraHudAnchor(cameraHudCanvasParent2.transform, ref cameraHudRotation2, ref cameraHudRotation2Initialized);
             float hudDistance = 1f;
             float hudVerticalOffset = -0.5f;
-            cameraHudCanvasParent2.transform.localPosition = new Vector3(VHVRConfig.CameraLocked2Pos().x, hudVerticalOffset + VHVRConfig.CameraLocked2Pos().y, hudDistance);
+            var localOffset = new Vector3(VHVRConfig.CameraLocked2Pos().x, hudVerticalOffset + VHVRConfig.CameraLocked2Pos().y, hudDistance);
+            cameraHudCanvasParent2.transform.position += cameraHudCanvasParent2.transform.rotation * localOffset;
             cameraHudCanvas2.GetComponent<RectTransform>().localScale = Vector3.one * scaleFactor * hudDistance * VHVRConfig.CameraLocked2Pos().z;
-            cameraHudCanvasParent2.transform.localRotation = Quaternion.Euler(Vector3.zero);
             cameraHudCanvasGroup2.alpha = 1f;
 
         }
 
-        private void setCameraHudAnchor(Transform anchor, ref Quaternion currentRotation)
+        private void setCameraHudAnchor(Transform anchor, ref Quaternion currentRotation, ref bool rotationInitialized)
         {
             anchor.SetParent(null, worldPositionStays: true);
             var forward = Vector3.ProjectOnPlane(hudCamera.transform.forward, Vector3.up);
@@ -336,7 +337,7 @@ namespace ValheimVRMod.VRCore.UI
                 forward = Vector3.ProjectOnPlane(hudCamera.transform.up, Vector3.up);
             }
             var targetRotation = Quaternion.LookRotation(forward.normalized, Vector3.up);
-            if (!cameraHudRotationInitialized)
+            if (!rotationInitialized)
             {
                 currentRotation = targetRotation;
             }
@@ -346,7 +347,7 @@ namespace ValheimVRMod.VRCore.UI
             }
 
             anchor.SetPositionAndRotation(hudCamera.transform.position, currentRotation);
-            cameraHudRotationInitialized = true;
+            rotationInitialized = true;
         }
 
         private static void applyCameraHudCurvature(GameObject root, Canvas canvas)

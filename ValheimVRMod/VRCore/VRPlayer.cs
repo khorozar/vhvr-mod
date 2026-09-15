@@ -344,6 +344,23 @@ namespace ValheimVRMod.VRCore
             RequestPelvisCaliberation();
         }
 
+        // WorldScale changes both the local avatar and the child VR rig. Keep the rig
+        // counter-scaled so controller poses remain in real playspace units, then request
+        // fresh eye/body calibration in the new coordinate system.
+        public static void ApplyWorldScale()
+        {
+            float localBodyScale = VrikCreator.ROOT_SCALE * VHVRConfig.WorldScale();
+            if (vrikRef != null && vrikRef.references.root != null)
+            {
+                vrikRef.references.root.localScale = Vector3.one * localBodyScale;
+            }
+            if (_instance != null)
+            {
+                _instance.transform.localScale = Vector3.one / localBodyScale;
+            }
+            RequestRecentering();
+        }
+
         public static void RequestPelvisCaliberation()
         {
             bodyTrackingCaliberationPending = true;
@@ -1153,7 +1170,7 @@ namespace ValheimVRMod.VRCore
             // The VRIK body receives WorldScale locally. Counter-scale the tracked rig so its
             // world-space scale remains stable: controller poses still match the real playspace,
             // while shoulders, arms and legs grow/shrink with the apparent world scale.
-            _instance.transform.localScale = Vector3.one / VrikCreator.ROOT_SCALE;
+            _instance.transform.localScale = Vector3.one / (VrikCreator.ROOT_SCALE * VHVRConfig.WorldScale());
             attachedToPlayer = true;
 
             maybeExitDodge();
@@ -1590,12 +1607,13 @@ namespace ValheimVRMod.VRCore
             var hmd = Valve.VR.InteractionSystem.Player.instance.hmdTransform;
             if (firstPersonHeightOffset == null)
             {
-                // Measure the distance between HMD and the desired game eye in *rig local*
-                // units. The tracked rig can be scaled to alter apparent world size, so a
-                // world-space measurement applied later as localPosition would be scaled a
-                // second time. That made eye height increasingly wrong away from scale 1.
+                // localPosition is interpreted by the rig's parent, not by the rig itself.
+                // Use that parent's scale when turning the world-space height difference
+                // into a local correction; using _instance's counter-scale shifts eye height
+                // whenever WorldScale is not 1.00.
+                Transform positionParent = _instance.transform.parent ?? playerCharacter.transform;
                 float localToWorldScale = Vector3.Dot(
-                    _instance.transform.TransformVector(Vector3.up), playerCharacter.transform.up);
+                    positionParent.TransformVector(Vector3.up), playerCharacter.transform.up);
                 if (Mathf.Abs(localToWorldScale) > Mathf.Epsilon)
                 {
                     firstPersonHeightOffset = Vector3.Dot(

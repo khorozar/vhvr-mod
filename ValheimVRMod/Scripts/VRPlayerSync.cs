@@ -73,30 +73,38 @@ namespace ValheimVRMod.Scripts {
         private Quaternion[] leftFingerRotations = new Quaternion[20];
         private Quaternion[] rightFingerRotations = new Quaternion[20];
         private readonly OwnerPoseSnapshot lastSentOwnerPose = new OwnerPoseSnapshot();
+        // These placeholders belong to this synchronizer. The public fields are later
+        // replaced with the local VR rig's objects and must not destroy those objects.
+        private GameObject ownedCamera;
+        private GameObject ownedLeftHand;
+        private GameObject ownedRightHand;
+        private GameObject ownedPelvis;
+        private GameObject ownedLeftFoot;
+        private GameObject ownedRightFoot;
 
         private bool fingersUpdated;
         // TODO: remove this once weapon sync is fully supported
         
 
         private void Awake() {
-            camera = new GameObject();
-            leftHand = new GameObject();
-            rightHand = new GameObject();
-            pelvis = new GameObject();
-            leftFoot = new GameObject();
-            rightFoot = new GameObject();
+            camera = ownedCamera = new GameObject();
+            leftHand = ownedLeftHand = new GameObject();
+            rightHand = ownedRightHand = new GameObject();
+            pelvis = ownedPelvis = new GameObject();
+            leftFoot = ownedLeftFoot = new GameObject();
+            rightFoot = ownedRightFoot = new GameObject();
             player = GetComponent<Player>();
             netView = GetComponent<ZNetView>();
         }
 
         private void OnDestroy()
         {
-            Destroy(camera);
-            Destroy(leftHand);
-            Destroy(rightHand);
-            Destroy(pelvis);
-            Destroy(leftFoot);
-            Destroy(rightFoot);
+            Destroy(ownedCamera);
+            Destroy(ownedLeftHand);
+            Destroy(ownedRightHand);
+            Destroy(ownedPelvis);
+            Destroy(ownedLeftFoot);
+            Destroy(ownedRightFoot);
         }
 
         void Start()
@@ -244,7 +252,13 @@ namespace ValheimVRMod.Scripts {
             var handedness = isLeftHanded;
             var wieldState = LocalWeaponWield.LocalPlayerTwoHandedState;
             var isInverseHold = InverseHold();
-            var isFootTrackingActive = VRPlayer.vrPlayerInstance != null && VRPlayer.vrPlayerInstance.shouldTrackFeet();
+            Transform trackedLeftFoot = VRPlayer.leftFoot;
+            Transform trackedRightFoot = VRPlayer.rightFoot;
+            var isFootTrackingActive =
+                VRPlayer.vrPlayerInstance != null &&
+                VRPlayer.vrPlayerInstance.shouldTrackFeet() &&
+                trackedLeftFoot != null &&
+                trackedRightFoot != null;
 
             if (isVrikEnabled)
             {
@@ -258,7 +272,7 @@ namespace ValheimVRMod.Scripts {
                 VRPlayer.vrikRef.references.leftHand, VRPlayer.vrikRef.references.rightHand,
                 isVrikEnabled, isPullingBow, handedness, wieldState, isInverseHold,
                 weaponSyncLocalPosition, weaponSyncLocalRotation, isFootTrackingActive,
-                leftFoot.transform, rightFoot.transform);
+                trackedLeftFoot, trackedRightFoot);
             if (!stateChanged && now - lastOwnerSyncTime < OWNER_SYNC_HEARTBEAT_INTERVAL)
             {
                 return;
@@ -269,7 +283,7 @@ namespace ValheimVRMod.Scripts {
                 VRPlayer.vrikRef.references.leftHand, VRPlayer.vrikRef.references.rightHand,
                 isVrikEnabled, isPullingBow, handedness, wieldState, isInverseHold,
                 weaponSyncLocalPosition, weaponSyncLocalRotation, isFootTrackingActive,
-                leftFoot.transform, rightFoot.transform);
+                trackedLeftFoot, trackedRightFoot);
             lastOwnerSyncTime = now;
 
             ZPackage pkg = new ZPackage();
@@ -296,8 +310,9 @@ namespace ValheimVRMod.Scripts {
             pkg.Write(weaponSyncLocalRotation);
             if (isFootTrackingActive)
             {
-                writeTransformRelativeToPlayer(pkg, VRPlayer.leftFoot);
-                writeTransformRelativeToPlayer(pkg, VRPlayer.rightFoot);
+                // Snapshot and packet must observe the same physical tracker transforms.
+                writeTransformRelativeToPlayer(pkg, trackedLeftFoot);
+                writeTransformRelativeToPlayer(pkg, trackedRightFoot);
             }
 
             netView.GetZDO().Set("vr_data", pkg.GetArray());
