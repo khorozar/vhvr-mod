@@ -60,9 +60,10 @@ it useful to have some reminders though especially when I'm not in my default en
 1. You'll need a [Unity ID](https://id.unity.com/account/new). This requires
    email verification and so forth, so best to get it out of the way first.
 2. Download [Unity Hub](https://unity3d.com/get-unity/download), and log in.
-3. Install [Unity.2019.4.21](unityhub://2019.4.21f1/b76dac84db26). If clicking that doesn't work, go to the
-   [Unity Archive](https://unity3d.com/get-unity/download/archive), then choose the `Unity 2019.x` tab at the
-   top, then `Unity.2019.4.21` and click the `Unity Hub` button.
+3. Install Unity **6000.0.75f1** (must match the Unity version Valheim itself currently ships with — check
+   `BepInEx/LogOutput.log` in your Valheim install for the exact "Running under Unity v..." line if the game
+   has since updated). Go to the [Unity Archive](https://unity3d.com/get-unity/download/archive), choose the
+   `Unity 6` tab, find `6000.0.75f1`, and click the `Unity Hub` button.
 
 ### Bepinex Publicizer Details {#publicizer-install}
 

@@ -10,6 +10,10 @@ namespace ValheimVRMod.Scripts
     public class WeaponCollision : MonoBehaviour
     {
         private const float MIN_STAB_SPEED = 4f;
+        // A controller's reported tip speed is considerably lower than the speed of a real
+        // spear tip. Keeping the generic 4 m/s threshold made natural forward thrusts fail.
+        private const float MIN_SPEAR_STAB_SPEED = 2f;
+        private const float MAX_SPEAR_STAB_ANGLE = 45f;
         private const float MIN_HAMMER_SPEED = 1;
         private const float MIN_LONG_TOOL_SPEED = 1.5f;
         // The offset amount of the point on the weapon relative to the hand to calculate the speed of.
@@ -653,11 +657,16 @@ namespace ValheimVRMod.Scripts
 
         private static bool isStab(Vector3 velocity)
         {
-            if (!WeaponUtils.IsStab(velocity, LocalWeaponWield.weaponForward, LocalWeaponWield.isCurrentlyTwoHanded())) {
+            bool isSpear = EquipScript.CurrentMainHandEquipType() == EquipType.Spear;
+            bool pointsForward = isSpear
+                ? Vector3.Angle(velocity, LocalWeaponWield.weaponForward) < MAX_SPEAR_STAB_ANGLE
+                : WeaponUtils.IsStab(velocity, LocalWeaponWield.weaponForward, LocalWeaponWield.isCurrentlyTwoHanded());
+            if (!pointsForward) {
                 return false;
             }
 
-            if (Vector3.Dot(velocity, LocalWeaponWield.weaponForward) < MIN_STAB_SPEED)
+            float requiredSpeed = isSpear ? MIN_SPEAR_STAB_SPEED : MIN_STAB_SPEED;
+            if (Vector3.Dot(velocity, LocalWeaponWield.weaponForward) < requiredSpeed)
             {   
                 return false;
             }

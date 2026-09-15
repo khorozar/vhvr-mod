@@ -9,36 +9,60 @@ using ValheimVRMod.Utilities;
 
 namespace ValheimVRMod.Scripts {
     public class ConfigComponent : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler {
-        private static string textStr = "";
         private static ConfigComponent currentHoveredComponent;
 
         public KeyValuePair<string, ConfigEntryBase> configValue;
         public UnityAction<string> saveAction;
         public string value;
+        public string helpText;
+        private string originalValue;
 
-        public void LateUpdate() {
-            TMPro.TMP_Text textObj = ConfigSettings.toolTip.GetComponentInChildren<TMPro.TMP_Text>();
-            textObj.text = textStr;
-            ConfigSettings.toolTip.GetComponent<Image>().rectTransform.sizeDelta = new Vector2(908, textObj.preferredHeight + 8);
+        public void BeginPreview()
+        {
+            if (originalValue == null)
+            {
+                originalValue = configValue.Value.GetSerializedValue();
+            }
+        }
+
+        // Apply immediately so VR settings can be judged while the player is looking at
+        // the body, HUD, or menu. ConfigSettings owns the session and restores this value
+        // on Back, so previewing never commits a half-finished adjustment to disk.
+        public void Preview(string serializedValue)
+        {
+            BeginPreview();
+            value = serializedValue;
+            configValue.Value.SetSerializedValue(serializedValue);
+        }
+
+        public void FinishPreview(bool save)
+        {
+            BeginPreview();
+            if (save)
+            {
+                // Key bindings still use their dedicated save action; live controls
+                // have already written their current value to the same ConfigEntry.
+                if (!string.IsNullOrEmpty(value) && saveAction != null)
+                {
+                    saveAction(value);
+                }
+            }
+            else
+            {
+                configValue.Value.SetSerializedValue(originalValue);
+            }
         }
 
         public void OnPointerEnter(PointerEventData eventData) {
-            currentHoveredComponent = this;
-            textStr = configValue.Value.Description.Description;
-            ConfigSettings.toolTip.SetActive(true);
+            // Help is now permanently visible below every setting. Keeping a hover-only
+            // tooltip made it difficult to operate with a VR laser pointer.
         }
 
         public void OnPointerExit(PointerEventData eventData) {
-            if (currentHoveredComponent == this)
-            {
-                ConfigSettings.toolTip.SetActive(false);
-            }
+            // See OnPointerEnter.
         }
 
-        private void OnDestroy() {
-            if (ConfigSettings.doSave) {
-                saveAction(value);   
-            }
-        }
+        // Saving/restoring is deliberately handled by ConfigSettings as one transaction,
+        // rather than independently as each cloned row is destroyed.
     }
 }

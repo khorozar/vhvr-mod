@@ -778,16 +778,14 @@ namespace ValheimVRMod.Patches
         }
     }
 
-    // remove stupid keyboard/mouse hints:
-    // for some reason after Hearth&Home "Awake" isn't called on the cloned hud, so to be sure we destroy it in Update
+    // Keep Valheim's contextual action labels in VR. They remain useful orientation cues
+    // even when the player's actual input is supplied through SteamVR bindings.
     [HarmonyPatch(typeof(KeyHints), "Update")]
     class PatchKeyHints {
 
         public static void Prefix(ref KeyHints __instance) {
-            if (VHVRConfig.NonVrPlayer()) {
-                return;
-            }
-            GameObject.Destroy(__instance);
+            // Intentionally left active for VR players: the labels explain which action is
+            // available at the current target, instead of leaving the virtual UI unexplained.
         }
     }
 

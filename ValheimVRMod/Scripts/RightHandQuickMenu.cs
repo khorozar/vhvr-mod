@@ -31,7 +31,9 @@ namespace ValheimVRMod.Scripts {
             }
             wrist.transform.localPosition = VHVRConfig.LeftWristQuickBarPos();
             wrist.transform.localRotation = VHVRConfig.LeftWristQuickBarRot();
-            wrist.SetActive(isInView() || IsInArea());
+            // Quick slots are intentional interactions: show them only when the active hand is
+            // brought to the other wrist, not merely because the wrist happens to face the HMD.
+            wrist.SetActive(IsInArea());
         }
 
         /**

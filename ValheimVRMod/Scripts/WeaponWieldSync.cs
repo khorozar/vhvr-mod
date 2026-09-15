@@ -47,7 +47,7 @@ namespace ValheimVRMod.Scripts
             return twoHandedStateSync.GetTwoHandedState();
         }
 
-        protected override void OnRenderObject()
+        protected override void UpdateWeaponPoseBeforeRender()
         {
             if (!twoHandedStateSync.IsVrEnabled())
             {
@@ -62,7 +62,7 @@ namespace ValheimVRMod.Scripts
                     transform.rotation;
                 recalculatedDirectionOffset = true;
             }
-            base.OnRenderObject();
+            base.UpdateWeaponPoseBeforeRender();
 
             if (twoHandedState == TwoHandedState.SingleHanded)
             {

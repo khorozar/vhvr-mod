@@ -46,7 +46,7 @@ namespace ValheimVRMod.VRCore.UI
      * way we want without having to do anything messy with the existing user input system
      * and all the GUI interaction stuff just works out of the box.
      */
-    [DefaultExecutionOrder(int.MaxValue)]
+    [DefaultExecutionOrder(int.MaxValue)] // Run after VRIK and weapon poses have been finalized.
     class VRGUI : MonoBehaviour
     {
         public static Vector2 GUI_DIMENSIONS = VHVRConfig.GetUiPanelResolution();
@@ -131,6 +131,9 @@ namespace ValheimVRMod.VRCore.UI
         private ulong _overlay = OpenVR.k_ulOverlayHandleInvalid;
         private int updateTicker = 0;
         private int textureUpdateTicker = 0;
+        // The game's canvases are created after the VR rig.  Avoid a full scene scan for
+        // every rendered frame while waiting for them to appear.
+        private float nextGuiCanvasSearchTime;
 
         public void Awake()
         {
@@ -146,15 +149,6 @@ namespace ValheimVRMod.VRCore.UI
             if (USING_OVERLAY)
             {
                 createOverlay();
-            }
-        }
-
-        public void OnRenderObject()
-        {
-            if (ensureGuiCanvas() && !USING_OVERLAY)
-            {
-                updateUiPanel();
-                maybeInitializePointers();
             }
         }
 
@@ -284,6 +278,14 @@ namespace ValheimVRMod.VRCore.UI
 
         public void LateUpdate()
         {
+            // OnRenderObject can run once for every camera/eye and happens too late for the
+            // current frame. Update the panel once after tracking and IK instead.
+            if (ensureGuiCanvas() && !USING_OVERLAY)
+            {
+                updateUiPanel();
+                maybeInitializePointers();
+            }
+
             // Needs to go into LateUpdate to ensure it runs after VRIK calculations
             // since the model HumanBodyBones are being referenced
             VRHud.instance.Update();
@@ -786,8 +788,14 @@ namespace ValheimVRMod.VRCore.UI
                 return true;
             }
 
+            if (Time.unscaledTime < nextGuiCanvasSearchTime)
+            {
+                return false;
+            }
+            nextGuiCanvasSearchTime = Time.unscaledTime + 0.25f;
+
             _guiCanvases.Clear();
-            foreach (var canvas in GameObject.FindObjectsOfType<Canvas>(includeInactive: true))
+            foreach (var canvas in GameObject.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 if (canvas.name == MENU_GUI_CANVAS || canvas.name == PASSWORD_CANVAS)
                 {

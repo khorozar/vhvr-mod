@@ -69,7 +69,11 @@ namespace ValheimVRMod.Scripts {
 
             vrik.references.leftToes = null;
             vrik.references.rightToes = null;
-            vrik.references.root.localScale = Vector3.one * ROOT_SCALE;
+            // Keep the avatar and the tracked rig in the same proportion.  The tracked rig is
+            // counter-scaled in VRPlayer, so WorldScale changes the local body without changing
+            // the player's network transform or the scale seen by other clients.
+            float localBodyScale = isLocalPlayer ? VHVRConfig.WorldScale() : 1f;
+            vrik.references.root.localScale = Vector3.one * ROOT_SCALE * localBodyScale;
 
             Transform leftHandConnector = isLocalPlayer ? localPlayerLeftHandConnector : new GameObject().transform;
             leftHandConnector.SetParent(leftController, false);

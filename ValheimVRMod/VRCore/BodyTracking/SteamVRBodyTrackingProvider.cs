@@ -12,9 +12,8 @@ namespace ValheimVRMod.VRCore.BodyTracking
     // by position. SteamVR resolves each source to whichever tracker the user assigned
     // that role to in the SteamVR settings, so there is no device-count ceiling and no
     // heuristic role detection.
-    // The pose action is created and registered at runtime (see <see cref="EnsureActionRegistered"/>)
-    // so this needs no changes to the prebuilt SteamVR_Actions.dll / Unity project --
-    // only an entry in actions.json (shipped via StreamingAssets).
+    // BodyPose is generated into SteamVR_Actions from actions.json, so it is initialized with
+    // the rest of the manifest actions before SteamVR starts.
     public class SteamVRBodyTrackingProvider : MonoBehaviour, IBodyTrackingProvider
     {
         // Must match the action name added to actions.json. Lives in the Valheim action
@@ -38,10 +37,9 @@ namespace ValheimVRMod.VRCore.BodyTracking
 
         private readonly Dictionary<BodyJoint, Transform> jointTransforms = new Dictionary<BodyJoint, Transform>();
 
-        // Creates the body pose action and registers it with SteamVR_Input. Must be called
-        // after SteamVR_Actions.PreInitialize() (which populates the action arrays) and
-        // before SteamVR_Input.Initialize() (which initializes every action in those arrays
-        // and which UpdatePoseActions() later iterates). Idempotent.
+        // Resolves the generated pose action after SteamVR_Actions.PreInitialize().
+        // Keeping this method preserves the VR startup sequence without adding a second
+        // action to SteamVR_Input's arrays and path registry.
         public static void EnsureActionRegistered()
         {
             if (bodyPose != null)
@@ -49,21 +47,8 @@ namespace ValheimVRMod.VRCore.BodyTracking
                 return;
             }
 
-            if (SteamVR_Input.actions == null || SteamVR_Input.actionsPose == null)
-            {
-                LogError("Cannot register body pose action before SteamVR action arrays are initialized.");
-                return;
-            }
-
-            bodyPose = SteamVR_Action.Create<SteamVR_Action_Pose>(ActionPath);
-
-            // Append to the arrays that SteamVR_Input.Initialize() and UpdatePoseActions()
-            // iterate, so the action gets a handle and is updated every frame.
-            SteamVR_Input.actions = SteamVR_Input.actions.Concat(new SteamVR_Action[] { bodyPose }).ToArray();
-            SteamVR_Input.actionsPose = SteamVR_Input.actionsPose.Concat(new SteamVR_Action_Pose[] { bodyPose }).ToArray();
-            SteamVR_Input.actionsIn = SteamVR_Input.actionsIn.Concat(new ISteamVR_Action_In[] { bodyPose }).ToArray();
-
-            LogInfo("Registered body tracking pose action: " + ActionPath);
+            bodyPose = SteamVR_Actions.valheim_BodyPose;
+            LogInfo("Using body tracking pose action: " + ActionPath);
         }
 
         // Attaches role-following child transforms under the given camera rig. Pose values

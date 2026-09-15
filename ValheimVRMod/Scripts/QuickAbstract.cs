@@ -161,7 +161,6 @@ namespace ValheimVRMod.Scripts
                     transform.localRotation *= Quaternion.Euler(VHVRConfig.getQuickMenuVerticalAngle() - 180, 0, 0);
                     break;
                 case "Hand Follow Cam":
-                    //Camera Version
                     transform.LookAt(vrCam.transform.position);
                     break;
                 case "Hand-Player":
@@ -181,14 +180,13 @@ namespace ValheimVRMod.Scripts
             resetQuickMenuLocker();
         }
 
-        // Records the current relative transform of the quick menu to the vr cam rig so that we can use it later to lock it relative to the vr cam rig.
         private void resetQuickMenuLocker()
         {
             if (!quickMenuLocker)
             {
                 quickMenuLocker = new GameObject().transform;
             }
-            
+
             quickMenuLocker.parent = GetVRCamRig();
             quickMenuLocker.SetPositionAndRotation(transform.position, transform.rotation);
         }
@@ -210,14 +208,14 @@ namespace ValheimVRMod.Scripts
                 resetQuickMenuLocker();
             }
 
-            if (quickMenuLocker != null) {
-                // Lock the quick menu's position and rotation relative to the vr cam rig so it moves and rotates with the player.
+            if (quickMenuLocker != null)
+            {
                 transform.SetPositionAndRotation(quickMenuLocker.position, quickMenuLocker.rotation);
             }
 
-            if (VHVRConfig.getQuickMenuType() == "Hand Follow Cam") {
+            if (VHVRConfig.getQuickMenuType() == "Hand Follow Cam")
+            {
                 Transform VRCamTransform = CameraUtils.getCamera(CameraUtils.VR_CAMERA).transform;
-                // Rotate the menu around its x-axis to have it facing the current height of the player.
                 transform.LookAt(Vector3.ProjectOnPlane(VRCamTransform.position - transform.position, transform.right) + transform.position);
             }
 
@@ -492,13 +490,13 @@ namespace ValheimVRMod.Scripts
                 return;
             }
 
-            elementCount = 0;
             var inventory = Player.m_localPlayer?.GetInventory();
             if (inventory == null)
             {
                 return;
             }
 
+            elementCount = 0;
             if (VHVRConfig.SplitQuickMenuRadialItemsBySlot())
             {
                 var isRightHand = VHVRConfig.LeftHanded() ^ isDominantHand;
@@ -516,7 +514,9 @@ namespace ValheimVRMod.Scripts
                         elements[i].useAsInventoryItemAndRefreshColor(inventory, item);
                     }
                 }
-            } else {
+            }
+            else
+            {
                 for (int i = 0; i < 8; i++)
                 {
                     ItemDrop.ItemData item = inventory?.GetItemAt(i, 0);
@@ -524,7 +524,8 @@ namespace ValheimVRMod.Scripts
                     {
                         continue;
                     }
-                    if (VHVRConfig.SplitQuickMenuRadialItemsByWieldingHand() && EquipScript.CanUseAsMainHandItem(item) ^ isDominantHand) {
+                    if (VHVRConfig.SplitQuickMenuRadialItemsByWieldingHand() && EquipScript.CanUseAsMainHandItem(item) ^ isDominantHand)
+                    {
                         continue;
                     }
                     elements[elementCount].useAsInventoryItemAndRefreshColor(inventory, item);

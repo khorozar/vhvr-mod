@@ -88,7 +88,9 @@ namespace ValheimVRMod.Utilities
             }
         }
 
-        void OnRenderObject()
+        // OnRenderObject runs once per camera in VR.  This is only debug visualization,
+        // so updating it once per frame is both sufficient and less costly.
+        void LateUpdate()
         {
             debugVelocityLine.enabled = renderDebugVelocityLine;
             if (renderDebugVelocityLine)
@@ -98,9 +100,12 @@ namespace ValheimVRMod.Utilities
             }
         }
 
-        void Destroy()
+        void OnDestroy()
         {
-            Destroy(debugVelocityLine.gameObject);
+            if (debugVelocityLine != null)
+            {
+                Destroy(debugVelocityLine.gameObject);
+            }
         }
 
         public Vector3 GetVelocity(Vector3? position = null)

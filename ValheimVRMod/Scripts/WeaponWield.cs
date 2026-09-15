@@ -4,6 +4,7 @@ using ValheimVRMod.Utilities;
 
 namespace ValheimVRMod.Scripts
 {
+    [DefaultExecutionOrder(10000)] // VRIK's configured execution order is 9998.
     public abstract class WeaponWield : MonoBehaviour, WeaponWield.LongGripStateProvider
     {
         protected bool currentTwoHandedWieldStartedWithLongGrip { get; private set; }
@@ -142,8 +143,26 @@ namespace ValheimVRMod.Scripts
             Destroy(originalTransform.gameObject);
         }
 
-        protected virtual void OnRenderObject()
+        protected virtual void OnEnable()
         {
+            // Application.onBeforeRender runs once for the frame immediately before the
+            // VR image is submitted.  That gives us the latest controller pose without
+            // OnRenderObject's once-per-camera/eye duplicate work.
+            Application.onBeforeRender += UpdateWeaponPoseBeforeRender;
+        }
+
+        protected virtual void OnDisable()
+        {
+            Application.onBeforeRender -= UpdateWeaponPoseBeforeRender;
+        }
+
+        protected virtual void UpdateWeaponPoseBeforeRender()
+        {
+            // Components are enabled before Initialize() has assigned their geometry.
+            if (geometryProvider == null)
+            {
+                return;
+            }
             UpdateTwoHandedWield();
         }
 

@@ -12,7 +12,9 @@ namespace ValheimVRMod.VRCore.UI.HudElements
         public string Placement => VHVRConfig.MinimapPanelPlacement();
         public HudOrientation Orientation => HudOrientation.Horizontal;
 
-        private bool toggledOn = true;
+        // The wrist minimap is useful on demand, but it should not occupy the player's view
+        // from the moment a world loads. The left-stick map action toggles it on.
+        private bool toggledOn = false;
         private bool wasTogglingMap;
 
         //Data class to store references to the small minimap elements

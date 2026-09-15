@@ -341,6 +341,7 @@ namespace ValheimVRMod.VRCore
             headPositionInitialized = false;
             firstPersonOffset = Vector3.zero;
             firstPersonHeightOffset = null;
+            RequestPelvisCaliberation();
         }
 
         public static void RequestPelvisCaliberation()
@@ -373,6 +374,9 @@ namespace ValheimVRMod.VRCore
             THIRD_PERSON_CONFIG_OFFSET = VHVRConfig.GetThirdPersonHeadOffset();
             ensurePlayerInstance();
             gameObject.AddComponent<VRControls>();
+            // Registered before weapon components are enabled, so the avatar pose is
+            // refreshed from the final tracked controller targets before weapons read it.
+            Application.onBeforeRender += UpdateLocalVrikBeforeRender;
         }
 
         void Update()
@@ -425,10 +429,25 @@ namespace ValheimVRMod.VRCore
 
         void OnDestroy()
         {
+            Application.onBeforeRender -= UpdateLocalVrikBeforeRender;
             if (_dodgingRoom != null)
             {
                 Destroy(_dodgingRoom.gameObject);
             }
+        }
+
+        // FinalIK normally solves during LateUpdate. SteamVR can update its tracked poses
+        // later in the frame, however, leaving the visible avatar arms a frame behind the
+        // controller models. Re-solve only the local, active VRIK immediately before render.
+        // WeaponWield subscribes after this component and therefore follows the refreshed arms.
+        private void UpdateLocalVrikBeforeRender()
+        {
+            if (vrikRef == null || !vrikRef.enabled || Game.IsPaused())
+            {
+                return;
+            }
+
+            vrikRef.solver.Update();
         }
 
         private void FixedUpdate()
@@ -938,9 +957,10 @@ namespace ValheimVRMod.VRCore
             gesturedLocomotionManager = new GesturedLocomotionManager();
 
             _fadeManager.OnFadeToWorld += () => {
-                //Recenter
-                VRPlayer.headPositionInitialized = false;
-                firstPersonOffset = Vector3.zero;
+                // A portal, sleep, death, or other fade can replace the player transform
+                // while the rig persists.  Discard every measurement tied to the previous
+                // body rather than reusing its eye/pelvis offset in the new location.
+                VRPlayer.RequestRecentering();
                 VRPlayer.vrPlayerInstance?.ResetRoomscaleCamera();
             };
         }
@@ -1130,6 +1150,9 @@ namespace ValheimVRMod.VRCore
                 return;
             }
             _instance.transform.SetParent(playerCharacter.transform, false);
+            // The VRIK body receives WorldScale locally. Counter-scale the tracked rig so its
+            // world-space scale remains stable: controller poses still match the real playspace,
+            // while shoulders, arms and legs grow/shrink with the apparent world scale.
             _instance.transform.localScale = Vector3.one / VrikCreator.ROOT_SCALE;
             attachedToPlayer = true;
 
@@ -1148,7 +1171,11 @@ namespace ValheimVRMod.VRCore
             {
                 initialRoomscaleLocomotiveOffsetFromHead = Vector3.zero;
             }
-            float firstPersonAdjust = inFirstPerson ? (float) firstPersonHeightOffset : 0.0f;
+            // A transition can attach the rig while the player is dodging, before
+            // maybeInitHeadPosition has a valid HMD sample. Keep the camera usable for
+            // that frame and calibrate as soon as the pose becomes available instead of
+            // throwing from a nullable cast.
+            float firstPersonAdjust = inFirstPerson ? firstPersonHeightOffset.GetValueOrDefault() : 0.0f;
             setHeadVisibility(!inFirstPerson);
             // Update the position with the first person adjustment calculated in init phase
             _instance.transform.localPosition = getDesiredLocalPosition(playerCharacter) // Base Positioning
@@ -1563,8 +1590,23 @@ namespace ValheimVRMod.VRCore
             var hmd = Valve.VR.InteractionSystem.Player.instance.hmdTransform;
             if (firstPersonHeightOffset == null)
             {
-                // Measure the distance between HMD and desires location, and save it.
-                firstPersonHeightOffset = Vector3.Dot(_instance.transform.position - hmd.position, playerCharacter.transform.up);
+                // Measure the distance between HMD and the desired game eye in *rig local*
+                // units. The tracked rig can be scaled to alter apparent world size, so a
+                // world-space measurement applied later as localPosition would be scaled a
+                // second time. That made eye height increasingly wrong away from scale 1.
+                float localToWorldScale = Vector3.Dot(
+                    _instance.transform.TransformVector(Vector3.up), playerCharacter.transform.up);
+                if (Mathf.Abs(localToWorldScale) > Mathf.Epsilon)
+                {
+                    firstPersonHeightOffset = Vector3.Dot(
+                        _instance.transform.position - hmd.position,
+                        playerCharacter.transform.up) / localToWorldScale;
+                }
+                else
+                {
+                    LogWarning("Cannot calibrate VR eye height because rig scale is zero.");
+                    return;
+                }
             }
 
             if (_headZoomLevel != HeadZoomLevel.FirstPerson)
@@ -1715,8 +1757,7 @@ namespace ValheimVRMod.VRCore
             _instance.transform.position = desirePosition;
             _instance.transform.rotation = mainCamera.gameObject.transform.rotation;
             attachedToPlayer = false;
-            headPositionInitialized = false;
-            firstPersonOffset = Vector3.zero;
+            RequestRecentering();
         }
 
         // Used to turn off the head model when player is currently occupying it.

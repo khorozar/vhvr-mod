@@ -84,8 +84,9 @@ namespace ValheimVRMod.Scripts
             base.OnDestroy();
         }
 
-        protected void OnDisable()
+        protected override void OnDisable()
         {
+            base.OnDisable();
             LocalPlayerTwoHandedState = TwoHandedState.SingleHanded;
             IsWeaponPointingUlnar = false;
         }
@@ -185,7 +186,7 @@ namespace ValheimVRMod.Scripts
                 ShieldBlock.instance?.ScaleShieldSize(shieldSize);
             }
 
-            // The transform outside OnRenderObject() might be invalid or discontinuous, therefore we need to record its state within this method for physics calculation later.
+            // Record the final post-IK transform for physics calculations that run later.
             lastRenderedTransform.parent = transform;
             lastRenderedTransform.SetPositionAndRotation(transform.position, transform.rotation);
             lastRenderedTransform.localScale = Vector3.one;

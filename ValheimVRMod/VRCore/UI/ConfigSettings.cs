@@ -22,8 +22,10 @@ namespace ValheimVRMod.VRCore.UI {
         private const bool ENABLE_VHVR_SETTINGS_DIALOG = true;
         
         private const float MENU_ENTRY_HEIGHT = 40;
+        private const float SETTINGS_ENTRY_HEIGHT = 52;
         private const string MenuName = "VHVR";
         private const int TabButtonWidth = 100;
+        private const string SettingsHelp = "Point at a control and pull the trigger. Changes preview immediately. Save keeps them; Back restores the previous values. Each setting has its explanation directly underneath.";
         
         private static GameObject tabButtonPrefab;
         private static GameObject controlSettingsPrefab;
@@ -41,6 +43,59 @@ namespace ValheimVRMod.VRCore.UI {
         private static int tabCounter;
         public static bool doSave;
         public static GameObject toolTip;
+        private static TMP_Text toolTipText;
+        private static Image toolTipBackground;
+        private static bool previewSaveOnConfigSet;
+
+        private class SettingsPage
+        {
+            public string Name;
+            public string[] Keys;
+
+            public SettingsPage(string name, params string[] keys)
+            {
+                Name = name;
+                Keys = keys;
+            }
+        }
+
+        // These labels describe an outcome rather than exposing internal config keys.
+        // Keys not listed here stay available in Advanced with a readable split-name label.
+        private static readonly Dictionary<string, string> FriendlyNames = new Dictionary<string, string>
+        {
+            { "PlayerHeightAdjust", "Body height offset" }, { "WorldScale", "World scale" },
+            { "RecenterOnStart", "Recenter when the game starts" }, { "DisableRecenterPose", "Disable hands-in-front recenter" },
+            { "DominantHand", "Dominant hand" }, { "SnapTurnEnabled", "Snap turning" },
+            { "SnapTurnAngle", "Snap turn angle" }, { "SmoothTurnSpeed", "Smooth turn speed" },
+            { "JoyStickForwardDirection", "Movement direction" }, { "CharaterMovesWithHeadset", "Room-scale movement" },
+            { "SneakInput", "How to crouch" }, { "GesturedLocomotion", "Gestured movement" },
+            { "UseLegacyHud", "Use classic HUD" }, { "QuickMenuType", "Quick-menu orientation" },
+            { "QuickMenuVerticalAngle", "Quick-menu angle" }, { "UIPanelSize", "Menu size" },
+            { "UIPanelDistance", "Menu distance" }, { "UIPanelVerticalOffset", "Menu height" },
+            { "OneHandedBow", "One-handed bow and crossbow" }, { "SwingSpeedRequirement", "Melee swing strength" },
+            { "MomentumScalesAttackDamage", "Scale melee damage by swing" }, { "UseAmplifyOcclusion", "Ambient occlusion" },
+            { "EnemyRenderDistance", "Enemy render distance" }, { "BuildingPieceDetailReductionFactor", "Building detail" },
+            { "ShowDamageText", "Show damage numbers" }, { "NearClipPlane", "Near clipping distance" },
+            { "HipTrackerIndex", "Hip tracker device" }, { "LeftFootTrackerIndex", "Left-foot tracker device" },
+            { "RightFootTrackerIndex", "Right-foot tracker device" }
+        };
+
+        private static readonly Dictionary<string, string> FriendlyHelp = new Dictionary<string, string>
+        {
+            { "PlayerHeightAdjust", "Move the character body up or down relative to your real head. Changes are visible immediately." },
+            { "WorldScale", "Change how large the world feels. 1.00 is natural size; changing it re-calibrates your eye position." },
+            { "JoyStickForwardDirection", "Choose what ‘forward’ means when you push the stick: your view, a hand, your body, or the character." },
+            { "CharaterMovesWithHeadset", "Move the character when you physically walk in your play area. Turn it off if you prefer leaning in place." },
+            { "SnapTurnEnabled", "Turn in fixed comfort steps instead of continuously." },
+            { "SnapTurnAngle", "How far each snap turn rotates you." }, { "SmoothTurnSpeed", "How quickly continuous turning rotates you." },
+            { "QuickMenuType", "Choose whether the quick menu follows your hand, body, or view." },
+            { "UIPanelDistance", "How far the main inventory and menu panel sits in front of you. Changes are visible immediately." },
+            { "UIPanelSize", "Size of the main VR menu panel. Changes are visible immediately." },
+            { "UseAmplifyOcclusion", "Adds contact shadows. Performance impact: Medium." },
+            { "EnemyRenderDistance", "How far away enemies are fully rendered. Performance impact: High." },
+            { "BuildingPieceDetailReductionFactor", "Reduce distant building detail for better performance. Performance impact: Medium." },
+            { "NearClipPlane", "Advanced: how close objects can get before they disappear from view." }
+        };
 
         public static KeyboardMouseSettings keyboardMouseSettings;
 
@@ -162,23 +217,43 @@ namespace ValheimVRMod.VRCore.UI {
             toolTip = new GameObject();
             toolTip.transform.SetParent(settings, false);
 
-            var bkgImage = toolTip.AddComponent<Image>();
-            bkgImage.rectTransform.pivot = new Vector2(0.5f, 0);
-            bkgImage.rectTransform.anchoredPosition = new Vector2(0, -400);
-            bkgImage.color = new Color(0,0,0,0.5f);
-            bkgImage.raycastTarget = false;
+            toolTipBackground = toolTip.AddComponent<Image>();
+            toolTipBackground.rectTransform.pivot = new Vector2(0.5f, 0);
+            toolTipBackground.rectTransform.anchoredPosition = new Vector2(0, -400);
+            toolTipBackground.color = new Color(0,0,0,0.5f);
+            toolTipBackground.raycastTarget = false;
 
             var textObj = Object.Instantiate(togglePrefab.GetComponentInChildren<TMP_Text>().gameObject, toolTip.transform);
-            TMP_Text text = textObj.GetComponent<TMP_Text>();
-            text.rectTransform.anchorMin = text.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-            text.rectTransform.sizeDelta = new Vector2(900, 125);
-            text.rectTransform.anchoredPosition = new Vector2(454, 0);
+            toolTipText = textObj.GetComponent<TMP_Text>();
+            toolTipText.rectTransform.anchorMin = toolTipText.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            toolTipText.rectTransform.sizeDelta = new Vector2(900, 125);
+            toolTipText.rectTransform.anchoredPosition = new Vector2(454, 0);
             // text.resizeTextForBestFit = false;
-            text.fontSize = 20;
-            text.alignment = TextAlignmentOptions.MidlineLeft;
-            text.raycastTarget = false;
+            toolTipText.fontSize = 20;
+            toolTipText.alignment = TextAlignmentOptions.MidlineLeft;
+            toolTipText.raycastTarget = false;
 
             toolTip.SetActive(false);
+        }
+
+        public static void ShowToolTip(string text)
+        {
+            if (toolTip == null || toolTipText == null || toolTipBackground == null)
+            {
+                return;
+            }
+
+            toolTipText.text = text;
+            toolTipBackground.rectTransform.sizeDelta = new Vector2(908, toolTipText.preferredHeight + 8);
+            toolTip.SetActive(true);
+        }
+
+        public static void HideToolTip()
+        {
+            if (toolTip != null)
+            {
+                toolTip.SetActive(false);
+            }
         }
 
         /// <summary>
@@ -186,9 +261,12 @@ namespace ValheimVRMod.VRCore.UI {
         /// </summary>
         private static void createModSettings() {
             settings = Object.Instantiate(settingsPrefab, menuParent);
+            doSave = false;
+            previewSaveOnConfigSet = VHVRConfig.config.SaveOnConfigSet;
+            VHVRConfig.config.SaveOnConfigSet = false;
             settings.AddComponent<SettingsCloneMarker>();
             settings.transform.Find("Panel").Find("Title").GetComponent<TMP_Text>().text = MenuName;
-            createToolTip(settings.transform);
+            createSettingsHelp(settings.transform.Find("Panel"));
             var tabButtons = settings.transform.Find("Panel").Find("TabButtons");
 
             // destroy old tab buttons
@@ -203,33 +281,42 @@ namespace ValheimVRMod.VRCore.UI {
                 t.gameObject.SetActive(false);
             }
 
-            // reorder bepinex configs by sections
-            var orderedConfig = new Dictionary<string, Dictionary<string, ConfigEntryBase>>();
-            int sectionCount = 0;
-            foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> keyValuePair in VHVRConfig.config) {
-
-                // skip entries with section "Immutable", these are not changeable at runtime
-                if (keyValuePair.Key.Section == "Immutable") {
-                    continue;
-                }
-                if (!orderedConfig.ContainsKey(keyValuePair.Key.Section)) {
-                    orderedConfig.Add(keyValuePair.Key.Section, new Dictionary<string, ConfigEntryBase>());
-                    sectionCount++;
-                }
-
-                orderedConfig[keyValuePair.Key.Section][keyValuePair.Key.Key] = keyValuePair.Value;
-            }
-
             tabCounter = 0;
-            // iterate ordered configs and create tabs out of each section
-            foreach (KeyValuePair<string, Dictionary<string, ConfigEntryBase>> section in orderedConfig) {
-                createTabForSection(section, sectionCount);
+            var allConfig = GetRuntimeConfigEntries();
+            var usedKeys = new HashSet<string>();
+            var pages = GetSettingsPages();
+            var totalTabs = pages.Count + 2; // Advanced + Controls
+            foreach (var page in pages)
+            {
+                createTabForPage(page, allConfig, usedKeys, totalTabs);
             }
+            createAdvancedTab(allConfig, usedKeys, totalTabs);
+            createControlsTab(totalTabs);
 
             setupOkAndBack(settings.transform.Find("Panel"));
 
-            tabButtons.GetComponent<TabHandler>().SetActiveTab(0);
+            // The vanilla KeyboardMouse page clone runs its own enable logic one frame later.
+            // Re-activate our first generated page after that logic has finished; otherwise it
+            // is intermittently left empty until the user switches away and back.
+            settings.AddComponent<InitialTabActivator>().Initialize(tabButtons.GetComponent<TabHandler>(), settings.transform.Find("Panel").Find("TabContent").Find(pages[0].Name).gameObject);
             keyboardMouseSettings.UpdateBindings();
+        }
+
+        private static void createSettingsHelp(Transform panel)
+        {
+            var help = Object.Instantiate(togglePrefab.GetComponentInChildren<TMP_Text>().gameObject, panel);
+            help.name = "VHVRControlsHelp";
+            var text = help.GetComponent<TMP_Text>();
+            text.text = SettingsHelp;
+            text.fontSize = 14;
+            text.alignment = TextAlignmentOptions.Center;
+            text.raycastTarget = false;
+
+            var rect = text.rectTransform;
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(0, -55);
+            rect.sizeDelta = new Vector2(850, 38);
         }
 
         // Adds listeners for ok and back buttons
@@ -244,8 +331,7 @@ namespace ValheimVRMod.VRCore.UI {
                 okButton.onClick.RemoveAllListeners();
                 okButton.onClick.m_PersistentCalls.Clear();
                 okButton.onClick.AddListener(() => {
-                    doSave = true;
-                    GameObject.Destroy(settings);
+                    finishSettings(save: true);
                 });
                 Object.Destroy(okButton.GetComponent<UIGamePad>());
                 var hint = okButton.transform.Find("KeyHint");
@@ -262,8 +348,7 @@ namespace ValheimVRMod.VRCore.UI {
                 backButton.onClick.RemoveAllListeners();
                 backButton.onClick.m_PersistentCalls.Clear();
                 backButton.onClick.AddListener(() => {
-                    doSave = false;
-                    GameObject.Destroy(settings);
+                    finishSettings(save: false);
                 });
                 Object.Destroy(backButton.GetComponent<UIGamePad>());
                 var hint = backButton.transform.Find("KeyHint");
@@ -308,14 +393,14 @@ namespace ValheimVRMod.VRCore.UI {
             tab.m_button.onClick.AddListener(() => {
                 tabButtons.GetComponent<TabHandler>().SetActiveTab(activeTabIndex);
             });
-            tab.m_default = true;
+            tab.m_default = tabCounter == 0;
             tab.m_page = newTab.GetComponent<RectTransform>();
             tab.m_onClick = new UnityEvent();
 
             tabButtons.GetComponent<TabHandler>().m_tabs.Add(tab);
 
             int posX = 0;
-            int posY = 250;
+            int posY = 235;
             
             if (section.Value.Count > 18) {
                 posX = -200;
@@ -328,13 +413,71 @@ namespace ValheimVRMod.VRCore.UI {
                     continue;
                 }
                 
-                posY -= 30;
-                if (posY < -270) {
-                    posY = 250;
+                posY -= (int)SETTINGS_ENTRY_HEIGHT;
+                if (posY < -245) {
+                    posY = 235;
                     posX = 250;
                 }
             }
 
+            tabCounter++;
+        }
+
+        private static void createControlsTab(int tabCount)
+        {
+            var tabButtons = settings.transform.Find("Panel").Find("TabButtons");
+            var buttonObject = Object.Instantiate(tabButtonPrefab, tabButtons);
+            buttonObject.name = "Controls";
+            var buttonRect = buttonObject.GetComponent<RectTransform>();
+            buttonRect.anchoredPosition = new Vector2(TabButtonWidth * (tabCounter - (tabCount - 1) * 0.5f), buttonRect.anchoredPosition.y);
+            foreach (var label in buttonObject.GetComponentsInChildren<TMP_Text>(includeInactive: true)) label.text = "Controls";
+
+            var tabs = settings.transform.Find("Panel").Find("TabContent");
+            var page = Object.Instantiate(tabs.GetChild(0), tabs);
+            page.name = "Controls";
+            foreach (Transform child in page.transform) Object.Destroy(child.gameObject);
+
+            var tab = new TabHandler.Tab
+            {
+                m_button = buttonObject.GetComponent<Button>(),
+                m_default = false,
+                m_page = page.GetComponent<RectTransform>(),
+                m_onClick = new UnityEvent()
+            };
+            var activeTabIndex = tabCounter;
+            tab.m_button.onClick.AddListener(() => tabButtons.GetComponent<TabHandler>().SetActiveTab(activeTabIndex));
+            tabButtons.GetComponent<TabHandler>().m_tabs.Add(tab);
+
+            var guideObject = new GameObject("QuestControlsGuide", typeof(RectTransform), typeof(TextMeshProUGUI));
+            guideObject.transform.SetParent(page, false);
+            var guide = guideObject.GetComponent<TextMeshProUGUI>();
+            var template = togglePrefab.GetComponentInChildren<TMP_Text>();
+            guide.font = template.font;
+            guide.fontSharedMaterial = template.fontSharedMaterial;
+            guide.fontSize = 15;
+            guide.alignment = TextAlignmentOptions.TopLeft;
+            guide.enableWordWrapping = true;
+            guide.text =
+                "<b>Quest 3 — standard VHVR binding</b>\n\n" +
+                "<b>Left stick</b>  Move   |   <b>Left-stick click</b>  Map\n" +
+                "<b>Right stick</b>  Turn/look   |   <b>Right-stick click</b>  Menu\n" +
+                "<b>A</b>  Jump / confirm in context   |   <b>B</b>  Right-hand quick slots\n" +
+                "<b>X</b>  Inventory   |   <b>Y</b>  Left-hand quick actions\n" +
+                "<b>Either trigger</b>  Use / interact / activate selected item\n" +
+                "<b>Either Grip</b>  Hold that hand's weapon or object\n" +
+                "<b>Right stick: push up</b>  Toggle run   |   <b>push down</b>  Toggle crouch (when Crouch = Controller only)\n\n" +
+                "<b>While a VR laser is active</b>\n" +
+                "<b>Right trigger</b>  Select / left click   |   <b>Right B</b>  Back / right click\n" +
+                "<b>Grip + trigger</b>  Context action (map pin, discard, split stack — depends on the screen)\n\n" +
+                "<b>Spear</b>\n" +
+                "<b>Forward thrust into a target</b>  Melee stab   |   <b>Grip + trigger + throw</b>  Throw\n\n" +
+                "Bindings are the profile defaults. SteamVR Input can override them.";
+            guide.raycastTarget = false;
+            var rect = guide.rectTransform;
+            rect.anchorMin = rect.anchorMax = Vector2.one * 0.5f;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = new Vector2(0, -5);
+            rect.sizeDelta = new Vector2(880, 510);
             tabCounter++;
         }
 
@@ -343,18 +486,22 @@ namespace ValheimVRMod.VRCore.UI {
         /// </summary>
         private static bool createElement(KeyValuePair<string, ConfigEntryBase> configEntry, Transform parent, Vector2 pos, string sectionName) {
             
+            var helpText = GetHelpText(configEntry);
             if (configEntry.Value.SettingType == typeof(bool)) {
                 createToggle(configEntry, parent, pos);
+                createInlineDescription(parent, pos, helpText);
                 return true;
             }
 
             if (configEntry.Value.SettingType == typeof(KeyCode)) {
                 createKeyBinding(configEntry, parent, pos);
+                createInlineDescription(parent, pos, helpText);
                 return true;
             }
             
             if (configEntry.Value.SettingType == typeof(Vector3)) {
                 createTransformButton(configEntry, parent, pos, sectionName);
+                createInlineDescription(parent, pos, helpText);
                 return true;
             }
             
@@ -371,15 +518,69 @@ namespace ValheimVRMod.VRCore.UI {
             var type = acceptableValues.GetType();
             if (type.GetGenericTypeDefinition() == typeof(AcceptableValueList<>)) {
                 createValueList(configEntry, parent, pos, type, acceptableValues);
+                createInlineDescription(parent, pos, helpText);
                 return true;
             }
             
             if (type.GetGenericTypeDefinition() == typeof(AcceptableValueRange<>)) {
                 createValueRange(configEntry, parent, pos, type, acceptableValues);
+                createInlineDescription(parent, pos, helpText);
                 return true;
             }
 
             return false;
+        }
+
+        private static string GetDisplayName(string key)
+        {
+            if (FriendlyNames.TryGetValue(key, out var name)) return name;
+            return Regex.Replace(key, "(?<!^)([A-Z])", " $1");
+        }
+
+        private static string GetHelpText(KeyValuePair<string, ConfigEntryBase> entry)
+        {
+            var help = FriendlyHelp.TryGetValue(entry.Key, out var friendly) ? friendly : entry.Value.Description.Description;
+            help = Regex.Replace(help ?? string.Empty, "\\s+", " ").Trim();
+            // Long BepInEx descriptions were written for a text config file. In VR, keep the
+            // always-visible version scannable; the first sentence normally contains the action.
+            var sentenceEnd = help.IndexOfAny(new[] { '.', '!', '?' });
+            if (sentenceEnd >= 0 && sentenceEnd < 170)
+            {
+                help = help.Substring(0, sentenceEnd + 1);
+            }
+            return help.Length <= 175 ? help : help.Substring(0, 172).TrimEnd() + "...";
+        }
+
+        private static void createInlineDescription(Transform parent, Vector2 pos, string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            var description = new GameObject("Description", typeof(RectTransform), typeof(TextMeshProUGUI));
+            description.transform.SetParent(parent, false);
+            var label = description.GetComponent<TextMeshProUGUI>();
+            var template = togglePrefab.GetComponentInChildren<TMP_Text>();
+            label.font = template.font;
+            label.fontSharedMaterial = template.fontSharedMaterial;
+            label.text = text;
+            label.fontSize = 10;
+            label.enableWordWrapping = true;
+            label.overflowMode = TextOverflowModes.Ellipsis;
+            label.alignment = TextAlignmentOptions.TopLeft;
+            label.color = new Color(0.78f, 0.82f, 0.86f, 1f);
+            label.raycastTarget = false;
+
+            var rect = label.rectTransform;
+            rect.anchorMin = rect.anchorMax = Vector2.one * 0.5f;
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = pos + new Vector2(-105, -17);
+            rect.sizeDelta = new Vector2(315, 29);
+        }
+
+        private static void ConfigureRow(ConfigComponent component, KeyValuePair<string, ConfigEntryBase> entry)
+        {
+            component.configValue = entry;
+            component.helpText = GetHelpText(entry);
+            component.BeginPreview();
         }
 
         private static GameObject createTabButtonPrefab(GameObject vanillaObject)
@@ -411,20 +612,28 @@ namespace ValheimVRMod.VRCore.UI {
 
             var sliderObj = Object.Instantiate(sliderPrefab, parent);
             var configComponent = sliderObj.AddComponent<ConfigComponent>();
-            configComponent.configValue = configValue;  
-            sliderObj.transform.Find("Label").GetComponent<TMP_Text>().text = configValue.Key;
+            ConfigureRow(configComponent, configValue);
+            sliderObj.transform.Find("Label").GetComponent<TMP_Text>().text = GetDisplayName(configValue.Key);
             sliderObj.GetComponent<RectTransform>().anchoredPosition = pos + Vector2.right * 60;
             var slider = sliderObj.GetComponentInChildren<Slider>();
             slider.minValue = float.Parse(type.GetProperty("MinValue").GetValue(acceptableValues).ToString());
             slider.maxValue =  float.Parse(type.GetProperty("MaxValue").GetValue(acceptableValues).ToString());
-            slider.value = float.Parse(configValue.Value.GetSerializedValue(), CultureInfo.InvariantCulture);
+            var isFloat = acceptableValues.ValueType == typeof(float);
+            var increment = isFloat ? GetSliderIncrement(slider.minValue, slider.maxValue) : 1f;
+            slider.value = SnapToIncrement(float.Parse(configValue.Value.GetSerializedValue(), CultureInfo.InvariantCulture), slider.minValue, increment);
             var text = slider.transform.Find("Value").GetComponent<TMP_Text>();
-            text.text = "" + slider.value;
+            text.text = FormatSliderValue(slider.value, increment);
 
             slider.onValueChanged.AddListener(
                 (value) =>
                 {
-                    text.text = "" + slider.value;
+                    var snappedValue = SnapToIncrement(value, slider.minValue, increment);
+                    if (!Mathf.Approximately(slider.value, snappedValue))
+                    {
+                        slider.SetValueWithoutNotify(snappedValue);
+                    }
+                    text.text = FormatSliderValue(snappedValue, increment);
+                    configComponent.Preview(snappedValue.ToString(CultureInfo.InvariantCulture));
                 });
 
             if (acceptableValues.ValueType == typeof(int)) {
@@ -432,10 +641,97 @@ namespace ValheimVRMod.VRCore.UI {
             }
             
             configComponent.saveAction = param => {
-                configValue.Value.SetSerializedValue(slider.value.ToString(CultureInfo.InvariantCulture));
+                var snappedValue = SnapToIncrement(slider.value, slider.minValue, increment);
+                configValue.Value.SetSerializedValue(snappedValue.ToString(CultureInfo.InvariantCulture));
             };
 
 
+        }
+
+        private static void finishSettings(bool save)
+        {
+            if (settings == null) return;
+            doSave = save;
+            foreach (var component in settings.GetComponentsInChildren<ConfigComponent>(includeInactive: true))
+            {
+                component.FinishPreview(save);
+            }
+            VHVRConfig.config.SaveOnConfigSet = previewSaveOnConfigSet;
+            if (save)
+            {
+                VHVRConfig.config.Save();
+            }
+            GameObject.Destroy(settings);
+            settings = null;
+        }
+
+        private static Dictionary<string, KeyValuePair<string, ConfigEntryBase>> GetRuntimeConfigEntries()
+        {
+            var entries = new Dictionary<string, KeyValuePair<string, ConfigEntryBase>>();
+            foreach (var entry in VHVRConfig.config)
+            {
+                if (entry.Key.Section != "Immutable" && entry.Key.Key != "GroqApiKey")
+                {
+                    entries[entry.Key.Key] = new KeyValuePair<string, ConfigEntryBase>(entry.Key.Key, entry.Value);
+                }
+            }
+            return entries;
+        }
+
+        private static List<SettingsPage> GetSettingsPages()
+        {
+            return new List<SettingsPage>
+            {
+                new SettingsPage("Quick Setup", "PlayerHeightAdjust", "WorldScale", "RecenterOnStart", "DominantHand", "SnapTurnEnabled", "SnapTurnAngle", "SmoothTurnSpeed", "JoyStickForwardDirection", "CharaterMovesWithHeadset", "SneakInput", "UseLegacyHud", "QuickMenuType"),
+                new SettingsPage("Body & Camera", "PlayerHeightAdjust", "WorldScale", "DisableRecenterPose", "RoomscaleFadeToBlack", "ImmersiveShipCameraSitting", "ImmersiveShipCameraStanding", "ImmersiveDodgeRoll", "HipTrackerIndex", "LeftFootTrackerIndex", "RightFootTrackerIndex"),
+                new SettingsPage("Movement", "SnapTurnEnabled", "SnapTurnAngle", "SmoothTurnSpeed", "SmoothSnapTurn", "SmoothSnapSpeed", "JoyStickForwardDirection", "CharaterMovesWithHeadset", "SneakInput", "RoomScaleSneakHeight", "GesturedLocomotion", "GesturedJumpPreparationHeight", "GesturedJumpMinSpeed", "RunIsToggled", "AutoRunThreshold", "InvertTurnDirection"),
+                new SettingsPage("Weapons", "DominantHand", "OneHandedBow", "SwingSpeedRequirement", "MomentumScalesAttackDamage", "TwoHandedWield", "TwoHandedWithShield", "BlockingType", "SpearThrowingType", "CrossbowManualReload", "BowDrawRestrictType", "BowFullDrawLength"),
+                new SettingsPage("UI & HUD", "UseLegacyHud", "UIPanelSize", "UIPanelDistance", "UIPanelVerticalOffset", "QuickMenuType", "QuickMenuVerticalAngle", "QuickMenuRadialItemDistribution", "HealthPanelPlacement", "StaminaPanelPlacement", "EitrPanelPlacement", "MinimapPanelPlacement", "CameraLocked", "CameraLocked2", "LeftWrist", "RightWrist", "AttachInventoryToHand", "AttachBuildMenuToHand"),
+                new SettingsPage("Graphics", "UseAmplifyOcclusion", "ShowDamageText", "ShowAttackOutline", "RangedWeaponGlow", "MeleeWeaponGlow", "EnemyRenderDistance", "BuildingPieceDetailReductionFactor", "ShowEnemyHuds", "EnemyHudScale")
+            };
+        }
+
+        private static void createTabForPage(SettingsPage page, Dictionary<string, KeyValuePair<string, ConfigEntryBase>> allConfig, HashSet<string> usedKeys, int sectionCount)
+        {
+            var entries = new Dictionary<string, ConfigEntryBase>();
+            foreach (var key in page.Keys)
+            {
+                if (allConfig.TryGetValue(key, out var entry))
+                {
+                    entries[key] = entry.Value;
+                    usedKeys.Add(key);
+                }
+            }
+            createTabForSection(new KeyValuePair<string, Dictionary<string, ConfigEntryBase>>(page.Name, entries), sectionCount);
+        }
+
+        private static void createAdvancedTab(Dictionary<string, KeyValuePair<string, ConfigEntryBase>> allConfig, HashSet<string> usedKeys, int sectionCount)
+        {
+            var entries = new Dictionary<string, ConfigEntryBase>();
+            foreach (var entry in allConfig)
+            {
+                if (!usedKeys.Contains(entry.Key)) entries[entry.Key] = entry.Value.Value;
+            }
+            createTabForSection(new KeyValuePair<string, Dictionary<string, ConfigEntryBase>>("Advanced", entries), sectionCount);
+        }
+
+        private static float GetSliderIncrement(float min, float max)
+        {
+            // In VR, hundredths make sliders painfully slow and do not improve ordinary
+            // gameplay adjustments. The dedicated height-calibration mode remains smooth.
+            return 0.1f;
+        }
+
+        private static float SnapToIncrement(float value, float min, float increment)
+        {
+            return Mathf.Round((value - min) / increment) * increment + min;
+        }
+
+        private static string FormatSliderValue(float value, float increment)
+        {
+            if (increment >= 1f) return value.ToString("0", CultureInfo.InvariantCulture);
+            if (increment >= 0.1f) return value.ToString("0.0", CultureInfo.InvariantCulture);
+            return value.ToString("0.00", CultureInfo.InvariantCulture);
         }
 
         private static GameObject createChooserPrefab(GameObject vanillaPrefab)
@@ -485,9 +781,9 @@ namespace ValheimVRMod.VRCore.UI {
             chooserObj.SetActive(true);
 
             var configComponent = chooserObj.AddComponent<ConfigComponent>();
-            configComponent.configValue = configValue;
+            ConfigureRow(configComponent, configValue);
             var configKeyText = chooserObj.transform.Find("LabelLeft").GetComponent<TMP_Text>();
-            configKeyText.text = configValue.Key;
+            configKeyText.text = GetDisplayName(configValue.Key);
             if (configValue.Key == VHVRConfig.GesturedLocomotionLabel())
             {
                 var distance = GesturedLocomotionManager.distanceTraveled;
@@ -507,10 +803,12 @@ namespace ValheimVRMod.VRCore.UI {
             stepper.Find("Left").GetComponent<Button>().onClick.AddListener(() =>{
                 var text = valueList[mod(--currentIndex, valueList.Length)];
                 valueText.text = text;
+                configComponent.Preview(text);
             });
             stepper.Find("Right").GetComponent<Button>().onClick.AddListener(() => {
                 var text = valueList[mod(++currentIndex, valueList.Length)];
                 valueText.text = text;
+                configComponent.Preview(text);
             });
 
             configComponent.saveAction = param => {
@@ -522,12 +820,13 @@ namespace ValheimVRMod.VRCore.UI {
             
             var toggle = Object.Instantiate(togglePrefab, parent);
             var configComponent = toggle.AddComponent<ConfigComponent>();
-            configComponent.configValue = configValue;
+            ConfigureRow(configComponent, configValue);
             configComponent.saveAction = param => {
                 configValue.Value.SetSerializedValue(toggle.GetComponent<Toggle>().isOn ? "true" : "false");
             };
-            toggle.GetComponentInChildren<TMP_Text>().text = configValue.Key;
+            toggle.GetComponentInChildren<TMP_Text>().text = GetDisplayName(configValue.Key);
             toggle.GetComponent<Toggle>().isOn = configValue.Value.GetSerializedValue() == "true";
+            toggle.GetComponent<Toggle>().onValueChanged.AddListener(value => configComponent.Preview(value ? "true" : "false"));
             toggle.GetComponent<RectTransform>().anchoredPosition = pos + Vector2.right * 100;
         }
 
@@ -553,7 +852,9 @@ namespace ValheimVRMod.VRCore.UI {
             setButton.GetComponent<RectTransform>().anchorMin = Vector2.one * 0.5f;
             setButton.GetComponent<RectTransform>().anchorMax = Vector2.one * 0.5f;
             setButton.GetComponent<RectTransform>().sizeDelta = new Vector2(100, 30);
-            setButton.GetComponentInChildren<TMP_Text>().text = "Set";
+            // Position-like settings are adjusted in the world by moving a controller;
+            // calling this “Adjust” communicates that it is not an opaque numeric field.
+            setButton.GetComponentInChildren<TMP_Text>().text = "Adjust";
 
             setButton.GetComponent<Button>().onClick.m_PersistentCalls.Clear();
             setButton.GetComponent<Button>().onClick.RemoveAllListeners();
@@ -585,11 +886,11 @@ namespace ValheimVRMod.VRCore.UI {
             transformButton.GetComponent<RectTransform>().anchoredPosition = pos + Vector2.left * 10;
 
             var configComponent = transformButton.AddComponent<ConfigComponent>();
-            configComponent.configValue = configValue;
+            ConfigureRow(configComponent, configValue);
             configComponent.saveAction = param => {};
 
             var label = transformButton.transform.Find("Label").GetComponent<TMP_Text>();
-            label.text = configValue.Key;
+            label.text = GetDisplayName(configValue.Key);
 
             var setButton = transformButton.transform.Find("SetButton").GetComponent<Button>();
             if (!enableTransformButtons) {
@@ -709,12 +1010,12 @@ namespace ValheimVRMod.VRCore.UI {
             keyBinding.GetComponent<RectTransform>().anchoredPosition = pos + Vector2.right * 125;
 
             var configComponent = keyBinding.AddComponent<ConfigComponent>();
-            configComponent.configValue = configValue;
+            ConfigureRow(configComponent, configValue);
             configComponent.saveAction = param => {
                 configValue.Value.SetSerializedValue(param);
             };
 
-            keyBinding.transform.Find("Label").GetComponent<TMP_Text>().text = configValue.Key;
+            keyBinding.transform.Find("Label").GetComponent<TMP_Text>().text = GetDisplayName(configValue.Key);
             keyboardMouseSettings.m_keys.Add(new KeySetting {m_keyName = configValue.Key, m_keyTransform = keyBinding.GetComponent<RectTransform>()});
             keyBinding.GetComponentInChildren<Button>().onClick.AddListener(() => {
                 keyboardMouseSettings.OnOkAsync(null);
@@ -748,6 +1049,32 @@ namespace ValheimVRMod.VRCore.UI {
 
         private static int mod(int x, int m) {
             return (x%m + m)%m;
+        }
+
+        private class InitialTabActivator : MonoBehaviour
+        {
+            private TabHandler tabHandler;
+            private GameObject firstPage;
+
+            public void Initialize(TabHandler handler, GameObject page)
+            {
+                tabHandler = handler;
+                firstPage = page;
+            }
+
+            private System.Collections.IEnumerator Start()
+            {
+                yield return null;
+                if (tabHandler != null)
+                {
+                    tabHandler.SetActiveTab(0);
+                }
+                if (firstPage != null)
+                {
+                    firstPage.SetActive(true);
+                }
+                Object.Destroy(this);
+            }
         }
 
         public static void updateBindings() {

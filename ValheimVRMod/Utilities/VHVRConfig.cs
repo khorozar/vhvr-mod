@@ -27,6 +27,7 @@ namespace ValheimVRMod.Utilities
         // General Settings
         private static ConfigEntry<string> mirrorMode;
         private static ConfigEntry<float> playerHeightAdjust;
+        private static ConfigEntry<float> worldScale;
         private static ConfigEntry<float> headOffsetX;
         private static ConfigEntry<float> headOffsetZ;
         private static ConfigEntry<float> headOffsetY;
@@ -390,6 +391,17 @@ namespace ValheimVRMod.Utilities
                               -0.2f,
                               new ConfigDescription("The height difference between the real world player and the game character",
                               new AcceptableValueRange<float>(-0.5f, 0.25f)));
+
+            worldScale = config.Bind("General",
+                              "WorldScale",
+                              1.0f,
+                              new ConfigDescription(
+                                  "Changes the apparent size of the world. 1.00 is the original scale; raise it to make the world feel smaller and the player taller, or lower it to make the world feel larger.",
+                                  new AcceptableValueRange<float>(0.75f, 1.50f)));
+            // Eye-height calibration is stored in rig-local units. Recalculate it as
+            // soon as the player changes world scale, rather than retaining an offset
+            // measured at a different scale and shifting the camera into the body.
+            worldScale.SettingChanged += ((o, i) => VRPlayer.RequestRecentering());
 
 
             headOffsetX = config.Bind("General",
@@ -1147,6 +1159,18 @@ namespace ValheimVRMod.Utilities
         public static float PlayerHeightAdjust()
         {
             return playerHeightAdjust.Value;
+        }
+
+        // Used by the in-world calibration flow.  The caller decides when to persist the
+        // config file, so changes can be previewed and safely cancelled.
+        public static void SetPlayerHeightAdjust(float value)
+        {
+            playerHeightAdjust.Value = Mathf.Clamp(value, -0.5f, 0.25f);
+        }
+
+        public static float WorldScale()
+        {
+            return worldScale.Value;
         }
 
         public static bool GetUseOverlayGui()

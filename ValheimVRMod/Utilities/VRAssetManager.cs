@@ -74,6 +74,9 @@ namespace ValheimVRMod.Utilities
                     LogWarning("Asset with duplicate name loaded: " + asset.name);
                 }
             }
+            // Keep the loaded Unity objects, but free the compressed bundle data. The assets are
+            // retained by _assets and remain valid until explicitly unloaded by Unity.
+            prefabAssetBundle.Unload(unloadAllLoadedObjects: false);
             return true;
         }
 
@@ -101,22 +104,18 @@ namespace ValheimVRMod.Utilities
                 LogError("GetAsset called before Initialize()");
                 return default;
             }
-            if (!_assets.ContainsKey(name))
+            if (!_assets.TryGetValue(name, out Object loadedAsset) || loadedAsset == null)
             {
-                LogError("No asset with name found: " + name);
-            }
-            var loadedAsset = _assets[name];
-            if (loadedAsset == null)
-            {
-                LogError("Loaded asset is null!");
+                LogError("No loaded asset named '" + name + "'.");
                 return default;
             }
-            if (!loadedAsset.GetType().IsAssignableFrom(typeof(T))) {
-                LogError("Asset " + name + " is not assignable to type " + typeof(T));
+            if (!(loadedAsset is T typedAsset))
+            {
+                LogError("Asset '" + name + "' is " + loadedAsset.GetType().Name + ", not " + typeof(T).Name + ".");
                 return default;
             }
             LogDebug("Asset " + name + " successfully retrieved.");
-            return loadedAsset as T;
+            return typedAsset;
         }
 
     }

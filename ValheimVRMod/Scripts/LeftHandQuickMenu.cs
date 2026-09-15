@@ -31,7 +31,8 @@ namespace ValheimVRMod.Scripts {
             }
             wrist.transform.localPosition = VHVRConfig.RightWristQuickBarPos();
             wrist.transform.localRotation = VHVRConfig.RightWristQuickBarRot();
-            wrist.SetActive(isInView() || IsInArea());
+            // See RightHandQuickMenu: avoid permanently floating quick-action icons.
+            wrist.SetActive(IsInArea());
         }
 
         public override void refreshItems() {

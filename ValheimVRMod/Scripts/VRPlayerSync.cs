@@ -12,6 +12,14 @@ namespace ValheimVRMod.Scripts {
         private VRIK vrikSync;
 
         const float MIN_CHANGE = 0.001f;
+        // A VR pose contains hands, pelvis, fingers, weapon and optional feet. Sending it every
+        // rendered frame needlessly updates the player's ZDO and allocates a package, while 30 Hz
+        // remains smooth because clients interpolate every physics step.
+        private const float OWNER_SYNC_INTERVAL = 1f / 30f;
+        private const float OWNER_SYNC_HEARTBEAT_INTERVAL = 1f;
+        private const float POSITION_SYNC_THRESHOLD = 0.005f;
+        private const float ROTATION_SYNC_THRESHOLD = 1f;
+        private const float FINGER_ROTATION_SYNC_THRESHOLD = 2f;
 
         public GameObject camera = null;
         public GameObject rightHand = null;
@@ -36,6 +44,7 @@ namespace ValheimVRMod.Scripts {
         private bool inverseHold = false;
 
         private Player player;
+        private ZNetView netView;
         private Vector3 ownerLastPositionCamera = Vector3.zero;
         private Vector3 ownerVelocityCamera = Vector3.zero;
         private Vector3 ownerLastPositionLeft = Vector3.zero;
@@ -53,6 +62,8 @@ namespace ValheimVRMod.Scripts {
 
         private uint lastDataRevision = 0;
         private float deltaTimeCounter = 0f;
+        private float nextOwnerSyncTime;
+        private float lastOwnerSyncTime;
 
         private static readonly string[] FINGERS = { 
             "LeftHandThumb1","LeftHandIndex1","LeftHandMiddle1","LeftHandRing1","LeftHandPinky1",
@@ -61,6 +72,7 @@ namespace ValheimVRMod.Scripts {
 
         private Quaternion[] leftFingerRotations = new Quaternion[20];
         private Quaternion[] rightFingerRotations = new Quaternion[20];
+        private readonly OwnerPoseSnapshot lastSentOwnerPose = new OwnerPoseSnapshot();
 
         private bool fingersUpdated;
         // TODO: remove this once weapon sync is fully supported
@@ -74,6 +86,17 @@ namespace ValheimVRMod.Scripts {
             leftFoot = new GameObject();
             rightFoot = new GameObject();
             player = GetComponent<Player>();
+            netView = GetComponent<ZNetView>();
+        }
+
+        private void OnDestroy()
+        {
+            Destroy(camera);
+            Destroy(leftHand);
+            Destroy(rightHand);
+            Destroy(pelvis);
+            Destroy(leftFoot);
+            Destroy(rightFoot);
         }
 
         void Start()
@@ -207,38 +230,77 @@ namespace ValheimVRMod.Scripts {
                 return;
             }
 
+            var now = Time.unscaledTime;
+            if (now < nextOwnerSyncTime)
+            {
+                return;
+            }
+            // Rebase on the current time rather than catching up after a hitch: a burst of old
+            // poses is less useful than the newest pose and just increases network pressure.
+            nextOwnerSyncTime = now + OWNER_SYNC_INTERVAL;
+
+            var isVrikEnabled = VRPlayer.vrikRef.enabled;
+            var isPullingBow = BowLocalManager.instance != null && BowLocalManager.instance.pulling;
+            var handedness = isLeftHanded;
+            var wieldState = LocalWeaponWield.LocalPlayerTwoHandedState;
+            var isInverseHold = InverseHold();
+            var isFootTrackingActive = VRPlayer.vrPlayerInstance != null && VRPlayer.vrPlayerInstance.shouldTrackFeet();
+
+            if (isVrikEnabled)
+            {
+                pelvis.transform.SetPositionAndRotation(
+                    VRPlayer.vrikRef.solver.spine.pelvis.solverPosition,
+                    VRPlayer.vrikRef.solver.spine.pelvis.solverRotation);
+            }
+
+            var stateChanged = lastSentOwnerPose.HasChanged(
+                camera.transform, leftHand.transform, rightHand.transform, pelvis.transform,
+                VRPlayer.vrikRef.references.leftHand, VRPlayer.vrikRef.references.rightHand,
+                isVrikEnabled, isPullingBow, handedness, wieldState, isInverseHold,
+                weaponSyncLocalPosition, weaponSyncLocalRotation, isFootTrackingActive,
+                leftFoot.transform, rightFoot.transform);
+            if (!stateChanged && now - lastOwnerSyncTime < OWNER_SYNC_HEARTBEAT_INTERVAL)
+            {
+                return;
+            }
+
+            lastSentOwnerPose.Capture(
+                camera.transform, leftHand.transform, rightHand.transform, pelvis.transform,
+                VRPlayer.vrikRef.references.leftHand, VRPlayer.vrikRef.references.rightHand,
+                isVrikEnabled, isPullingBow, handedness, wieldState, isInverseHold,
+                weaponSyncLocalPosition, weaponSyncLocalRotation, isFootTrackingActive,
+                leftFoot.transform, rightFoot.transform);
+            lastOwnerSyncTime = now;
+
             ZPackage pkg = new ZPackage();
 
             writeData(pkg, camera, ownerVelocityCamera);
-            if (!VRPlayer.vrikRef.enabled)
+            if (!isVrikEnabled)
             {
                 // Stati that should temporarily disable VRIK such as sleeping/staggering/dodging are not sent over network,
                 // so we send a vr_data package short of further data to signal remote players that VRIK is temporarily disabled
-                GetComponent<ZNetView>().GetZDO().Set("vr_data", pkg.GetArray());
+                netView.GetZDO().Set("vr_data", pkg.GetArray());
                 return;
             }
 
             writeData(pkg, leftHand, ownerVelocityLeft);
             writeData(pkg, rightHand, ownerVelocityRight);
-            pelvis.transform.SetPositionAndRotation(
-                VRPlayer.vrikRef.solver.spine.pelvis.solverPosition,
-                VRPlayer.vrikRef.solver.spine.pelvis.solverRotation);
             writeData(pkg, pelvis, ownerVelocityCamera);
             writeFingers(pkg, VRPlayer.vrikRef.references.leftHand);
             writeFingers(pkg, VRPlayer.vrikRef.references.rightHand);
-            pkg.Write(BowLocalManager.instance != null && BowLocalManager.instance.pulling);
-            pkg.Write(isLeftHanded);
-            pkg.Write((byte)(twoHandedState = LocalWeaponWield.LocalPlayerTwoHandedState));
-            pkg.Write(InverseHold());
+            pkg.Write(isPullingBow);
+            pkg.Write(handedness);
+            pkg.Write((byte)(twoHandedState = wieldState));
+            pkg.Write(isInverseHold);
             pkg.Write(weaponSyncLocalPosition);
             pkg.Write(weaponSyncLocalRotation);
-            if (VRPlayer.vrPlayerInstance != null && VRPlayer.vrPlayerInstance.shouldTrackFeet())
+            if (isFootTrackingActive)
             {
                 writeTransformRelativeToPlayer(pkg, VRPlayer.leftFoot);
                 writeTransformRelativeToPlayer(pkg, VRPlayer.rightFoot);
             }
 
-            GetComponent<ZNetView>().GetZDO().Set("vr_data", pkg.GetArray());
+            netView.GetZDO().Set("vr_data", pkg.GetArray());
         }
 
         private void writeTransformRelativeToPlayer(ZPackage pkg, Transform transform) 
@@ -254,7 +316,7 @@ namespace ValheimVRMod.Scripts {
         }
 
         private void clientSync(float dt) {
-            ZDO zdo = GetComponent<ZNetView>().GetZDO();
+            ZDO zdo = netView.GetZDO();
             if (zdo == null)
             {
                 return;
@@ -471,7 +533,7 @@ namespace ValheimVRMod.Scripts {
             {
                 return false;
             }
-            var zdo = GetComponent<ZNetView>().GetZDO();
+            var zdo = netView.GetZDO();
             if (zdo == null)
             {
                 LogError("Null ZDO during isOwner check.");
@@ -482,8 +544,7 @@ namespace ValheimVRMod.Scripts {
 
         private bool isValid()
         {
-            var netview = GetComponent<ZNetView>();
-            return netview != null && netview.IsValid();
+            return netView != null && netView.IsValid();
         }
         
         private void writeFingers(ZPackage pkg, Transform hand) {
@@ -537,6 +598,178 @@ namespace ValheimVRMod.Scripts {
             fingerCounter++;
             if (finger.childCount > 0) {
                 applyFinger(finger.GetChild(0), fingerRotations, ref fingerCounter);
+            }
+        }
+
+        private class OwnerPoseSnapshot
+        {
+            private bool hasValue;
+            private bool vrikEnabled;
+            private bool pullingBow;
+            private bool leftHanded;
+            private WeaponWield.TwoHandedState wieldState;
+            private bool inverseHold;
+            private bool footTrackingActive;
+            private Vector3 cameraPosition, leftHandPosition, rightHandPosition, pelvisPosition;
+            private Quaternion cameraRotation, leftHandRotation, rightHandRotation, pelvisRotation;
+            private Vector3 weaponPosition, leftFootPosition, rightFootPosition;
+            private Quaternion weaponRotation, leftFootRotation, rightFootRotation;
+            private readonly Quaternion[] leftFingerRotations = new Quaternion[20];
+            private readonly Quaternion[] rightFingerRotations = new Quaternion[20];
+
+            public bool HasChanged(
+                Transform camera, Transform leftHand, Transform rightHand, Transform pelvis,
+                Transform leftFingerRoot, Transform rightFingerRoot,
+                bool currentVrikEnabled, bool currentPullingBow, bool currentLeftHanded,
+                WeaponWield.TwoHandedState currentWieldState, bool currentInverseHold,
+                Vector3 currentWeaponPosition, Quaternion currentWeaponRotation, bool currentFootTrackingActive,
+                Transform leftFoot, Transform rightFoot)
+            {
+                if (!hasValue ||
+                    vrikEnabled != currentVrikEnabled ||
+                    HasTransformChanged(cameraPosition, cameraRotation, camera) ||
+                    pullingBow != currentPullingBow || leftHanded != currentLeftHanded ||
+                    wieldState != currentWieldState || inverseHold != currentInverseHold)
+                {
+                    return true;
+                }
+
+                if (!currentVrikEnabled)
+                {
+                    return false;
+                }
+
+                return
+                    HasTransformChanged(leftHandPosition, leftHandRotation, leftHand) ||
+                    HasTransformChanged(rightHandPosition, rightHandRotation, rightHand) ||
+                    HasTransformChanged(pelvisPosition, pelvisRotation, pelvis) ||
+                    HasFingerRotationChanged(leftFingerRoot, leftFingerRotations) ||
+                    HasFingerRotationChanged(rightFingerRoot, rightFingerRotations) ||
+                    HasPositionChanged(weaponPosition, currentWeaponPosition) ||
+                    HasRotationChanged(weaponRotation, currentWeaponRotation) ||
+                    footTrackingActive != currentFootTrackingActive ||
+                    (currentFootTrackingActive &&
+                        (HasTransformChanged(leftFootPosition, leftFootRotation, leftFoot) ||
+                         HasTransformChanged(rightFootPosition, rightFootRotation, rightFoot)));
+            }
+
+            public void Capture(
+                Transform camera, Transform leftHand, Transform rightHand, Transform pelvis,
+                Transform leftFingerRoot, Transform rightFingerRoot,
+                bool currentVrikEnabled, bool currentPullingBow, bool currentLeftHanded,
+                WeaponWield.TwoHandedState currentWieldState, bool currentInverseHold,
+                Vector3 currentWeaponPosition, Quaternion currentWeaponRotation, bool currentFootTrackingActive,
+                Transform leftFoot, Transform rightFoot)
+            {
+                hasValue = true;
+                vrikEnabled = currentVrikEnabled;
+                pullingBow = currentPullingBow;
+                leftHanded = currentLeftHanded;
+                wieldState = currentWieldState;
+                inverseHold = currentInverseHold;
+                footTrackingActive = currentFootTrackingActive;
+                CaptureTransform(camera, out cameraPosition, out cameraRotation);
+                weaponPosition = currentWeaponPosition;
+                weaponRotation = currentWeaponRotation;
+
+                if (!currentVrikEnabled)
+                {
+                    return;
+                }
+
+                CaptureTransform(leftHand, out leftHandPosition, out leftHandRotation);
+                CaptureTransform(rightHand, out rightHandPosition, out rightHandRotation);
+                CaptureTransform(pelvis, out pelvisPosition, out pelvisRotation);
+                CaptureFingerRotations(leftFingerRoot, leftFingerRotations);
+                CaptureFingerRotations(rightFingerRoot, rightFingerRotations);
+                if (currentFootTrackingActive)
+                {
+                    CaptureTransform(leftFoot, out leftFootPosition, out leftFootRotation);
+                    CaptureTransform(rightFoot, out rightFootPosition, out rightFootRotation);
+                }
+            }
+
+            private static bool HasTransformChanged(Vector3 position, Quaternion rotation, Transform transform)
+            {
+                return HasPositionChanged(position, transform.position) || HasRotationChanged(rotation, transform.rotation);
+            }
+
+            private static bool HasPositionChanged(Vector3 previous, Vector3 current)
+            {
+                return (previous - current).sqrMagnitude > POSITION_SYNC_THRESHOLD * POSITION_SYNC_THRESHOLD;
+            }
+
+            private static bool HasRotationChanged(Quaternion previous, Quaternion current)
+            {
+                return Quaternion.Angle(previous, current) > ROTATION_SYNC_THRESHOLD;
+            }
+
+            private static void CaptureTransform(Transform transform, out Vector3 position, out Quaternion rotation)
+            {
+                position = transform.position;
+                rotation = transform.rotation;
+            }
+
+            private static bool HasFingerRotationChanged(Transform fingerRoot, Quaternion[] previousRotations)
+            {
+                var index = 0;
+                for (var i = 0; i < fingerRoot.childCount; i++)
+                {
+                    var child = fingerRoot.GetChild(i);
+                    if (FINGERS.Contains(child.name) && HasFingerChainChanged(child, previousRotations, ref index))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            private static bool HasFingerChainChanged(Transform finger, Quaternion[] previousRotations, ref int index)
+            {
+                if (index >= previousRotations.Length ||
+                    Quaternion.Angle(previousRotations[index++], finger.localRotation) > FINGER_ROTATION_SYNC_THRESHOLD)
+                {
+                    return true;
+                }
+
+                if (finger.childCount > 0)
+                {
+                    return HasFingerChainChanged(finger.GetChild(0), previousRotations, ref index);
+                }
+
+                return false;
+            }
+
+            private static void CaptureFingerRotations(Transform fingerRoot, Quaternion[] rotations)
+            {
+                var index = 0;
+                CaptureFingerRotationsRecursive(fingerRoot, rotations, ref index);
+            }
+
+            private static void CaptureFingerRotationsRecursive(Transform transform, Quaternion[] rotations, ref int index)
+            {
+                for (var i = 0; i < transform.childCount; i++)
+                {
+                    var child = transform.GetChild(i);
+                    if (FINGERS.Contains(child.name))
+                    {
+                        CaptureFingerChain(child, rotations, ref index);
+                    }
+                }
+            }
+
+            private static void CaptureFingerChain(Transform finger, Quaternion[] rotations, ref int index)
+            {
+                if (index >= rotations.Length)
+                {
+                    return;
+                }
+
+                rotations[index++] = finger.localRotation;
+                if (finger.childCount > 0)
+                {
+                    CaptureFingerChain(finger.GetChild(0), rotations, ref index);
+                }
             }
         }
     }

@@ -24,6 +24,7 @@ namespace ValheimVRMod.VRCore.UI
 
         private const float FULL_ALPHA_ANGLE = 5f;
         private const float ZERO_ALPHA_ANGLE = 90f;
+        private const float HUD_TURN_SPEED_DEGREES = 140f;
 
         private int updateTicker = 0;
 
@@ -78,6 +79,9 @@ namespace ValheimVRMod.VRCore.UI
         private Canvas cameraHudCanvas2;
         private CanvasGroup cameraHudCanvasGroup2;
         private GameObject cameraHudCanvasParent2;
+        private Quaternion cameraHudRotation;
+        private Quaternion cameraHudRotation2;
+        private bool cameraHudRotationInitialized;
 
         // Left Wrist Canvas
         private Canvas leftHudCanvas;
@@ -152,6 +156,10 @@ namespace ValheimVRMod.VRCore.UI
                 return;
             }
 
+            // The panel transform must follow the HMD every frame. Updating it only together
+            // with the content made the entire HUD jump in visible 16-frame steps.
+            updateHudPositionAndScale();
+
             if (++updateTicker < 16)
             {
                 return;
@@ -169,7 +177,6 @@ namespace ValheimVRMod.VRCore.UI
             {
                 leftHudCanvasParent.SetActive(VRPlayer.attachedToPlayer);
             }
-            updateHudPositionAndScale();
         }
 
         private void revertToLegacyHud()
@@ -275,9 +282,11 @@ namespace ValheimVRMod.VRCore.UI
                     break;
                 case CAMERA_LOCKED:
                     panelElement.Clone.Root.transform.SetParent(cameraHudCanvas.GetComponent<RectTransform>(), false);
+                    applyCameraHudCurvature(panelElement.Clone.Root, cameraHudCanvas);
                     break;
                 case CAMERA_LOCKED_2:
                     panelElement.Clone.Root.transform.SetParent(cameraHudCanvas2.GetComponent<RectTransform>(), false);
+                    applyCameraHudCurvature(panelElement.Clone.Root, cameraHudCanvas2);
                     break;
 
                 case LEGACY:
@@ -292,11 +301,9 @@ namespace ValheimVRMod.VRCore.UI
         }
 
         private void setCameraHudPosition() {
-            
             float canvasWidth = cameraHudCanvas.GetComponent<RectTransform>().rect.width;
             float scaleFactor = 0.1f / canvasWidth * VHVRConfig.CameraHudScale();
-            cameraHudCanvasParent.transform.SetParent(hudCamera.gameObject.transform, false);
-            cameraHudCanvasParent.transform.position = VRPlayer.instance.transform.position;
+            setCameraHudAnchor(cameraHudCanvasParent.transform, ref cameraHudRotation);
             float hudDistance = 1f;
             float hudVerticalOffset = -0.5f;
             cameraHudCanvasParent.transform.localPosition = new Vector3(VHVRConfig.CameraLockedPos().x, hudVerticalOffset + VHVRConfig.CameraLockedPos().y, hudDistance);
@@ -308,11 +315,9 @@ namespace ValheimVRMod.VRCore.UI
 
         private void setCameraHud2Position()
         {
-
             float canvasWidth = cameraHudCanvas2.GetComponent<RectTransform>().rect.width;
             float scaleFactor = 0.1f / canvasWidth * VHVRConfig.CameraHudScale();
-            cameraHudCanvasParent2.transform.SetParent(hudCamera.gameObject.transform, false);
-            cameraHudCanvasParent2.transform.position = VRPlayer.instance.transform.position;
+            setCameraHudAnchor(cameraHudCanvasParent2.transform, ref cameraHudRotation2);
             float hudDistance = 1f;
             float hudVerticalOffset = -0.5f;
             cameraHudCanvasParent2.transform.localPosition = new Vector3(VHVRConfig.CameraLocked2Pos().x, hudVerticalOffset + VHVRConfig.CameraLocked2Pos().y, hudDistance);
@@ -320,6 +325,41 @@ namespace ValheimVRMod.VRCore.UI
             cameraHudCanvasParent2.transform.localRotation = Quaternion.Euler(Vector3.zero);
             cameraHudCanvasGroup2.alpha = 1f;
 
+        }
+
+        private void setCameraHudAnchor(Transform anchor, ref Quaternion currentRotation)
+        {
+            anchor.SetParent(null, worldPositionStays: true);
+            var forward = Vector3.ProjectOnPlane(hudCamera.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < 0.0001f)
+            {
+                forward = Vector3.ProjectOnPlane(hudCamera.transform.up, Vector3.up);
+            }
+            var targetRotation = Quaternion.LookRotation(forward.normalized, Vector3.up);
+            if (!cameraHudRotationInitialized)
+            {
+                currentRotation = targetRotation;
+            }
+            else
+            {
+                currentRotation = Quaternion.RotateTowards(currentRotation, targetRotation, HUD_TURN_SPEED_DEGREES * Time.unscaledDeltaTime);
+            }
+
+            anchor.SetPositionAndRotation(hudCamera.transform.position, currentRotation);
+            cameraHudRotationInitialized = true;
+        }
+
+        private static void applyCameraHudCurvature(GameObject root, Canvas canvas)
+        {
+            foreach (var graphic in root.GetComponentsInChildren<Graphic>(includeInactive: true))
+            {
+                var curve = graphic.GetComponent<CurvedHudGraphic>();
+                if (curve == null)
+                {
+                    curve = graphic.gameObject.AddComponent<CurvedHudGraphic>();
+                }
+                curve.SetCanvas(canvas.transform);
+            }
         }
 
         private void setWristPosition(GameObject hCanvasParent, Canvas hCanvas, Transform hand, Vector3 pos, Quaternion rot)

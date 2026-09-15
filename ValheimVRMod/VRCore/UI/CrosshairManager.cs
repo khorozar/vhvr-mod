@@ -64,6 +64,13 @@ namespace ValheimVRMod.VRCore.UI
         private GameObject _crosshairCloneForWeapon;
         private GameObject _weaponCrosshair;
         public GameObject weaponCrosshair { get {
+                // The vanilla HUD is created after weapon components on some scene
+                // transitions.  Do not try to clone a crosshair until it has been
+                // discovered; retrying this every pre-render callback floods the log.
+                if (_crosshairCloneForWeapon == null && _crosshairClone == null)
+                {
+                    return null;
+                }
                 if (_weaponCrosshair == null)
                 {
                     _weaponCrosshair = new GameObject("WeaponCrosshair");

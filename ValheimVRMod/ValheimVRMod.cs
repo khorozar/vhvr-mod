@@ -69,6 +69,10 @@ namespace ValheimVRMod
         {
             HarmonyPatcher.DoPatching();
 
+            // Start SteamVR immediately for this VR-only profile.  VR initialization itself
+            // still waits for the startup cinematic, giving the runtime time to come online.
+            VRManager.EnsureSteamVRIsRunning();
+
             bool assetsInitialized = VRAssetManager.Initialize();
             if (!assetsInitialized)
             {

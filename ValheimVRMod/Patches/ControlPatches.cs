@@ -666,7 +666,7 @@ namespace ValheimVRMod.Patches {
         {
             bool togglingRun = toggleRun();
             bool runIsTriggered = toggleRun() && !lastToggleRunInput;
-            bool crouchApplied = SteamVR_Actions.valheim_ToggleCrouch.state;
+            bool crouchApplied = SteamVR_Actions.valheim_ToggleCrouch.state || VRControls.RightStickCrouchInput;
             if (crouchApplied || !VRPlayer.isMoving || Player.m_localPlayer.m_stamina < 1)
             {
                 // If the player presses crouch or stops moving, then always stop running.
@@ -775,7 +775,9 @@ namespace ValheimVRMod.Patches {
 
         static void handleControllerOnlySneak(Player player, ref bool crouch, bool isCrouchToggled)
         {
-            bool currentToggleCrouchState = SteamVR_Actions.valheim_ToggleCrouch.state;
+            // Use the action when SteamVR provides it, with a direct right-stick-down fallback
+            // for Quest Touch runtimes that do not report d-pad touch bindings.
+            bool currentToggleCrouchState = SteamVR_Actions.valheim_ToggleCrouch.state || VRControls.RightStickCrouchInput;
             bool crouchToggleTriggered = currentToggleCrouchState && !lastUpdateCrouchInput;
             bool standupTriggered =
                 ZInput_GetJoyRightStickY_Patch.hasRunInput ||

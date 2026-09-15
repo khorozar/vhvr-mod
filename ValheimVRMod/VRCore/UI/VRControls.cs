@@ -91,6 +91,10 @@ namespace ValheimVRMod.VRCore.UI
         public static bool isExhaustedFromRunning;
         private static Vector2 smoothWalkVelocity;
 
+        // Quest Touch joystick touch input is not consistently exposed by every SteamVR
+        // runtime. Read the actual right-stick axis as a reliable controller-only crouch input.
+        public static bool RightStickCrouchInput => _instance != null && _instance.GetJoyRightStickY() > 0.75f;
+
         public static string ToggleMiniMap { get { return "ToggleMiniMap"; } }
 
         public static VRControls instance { get { return _instance; } }
@@ -208,8 +212,8 @@ namespace ValheimVRMod.VRCore.UI
             }
 
             if (deltaTime == 0 ||
-                smoothWalkVelocity.x == float.NaN ||
-                smoothWalkVelocity.y == float.NaN ||
+                float.IsNaN(smoothWalkVelocity.x) ||
+                float.IsNaN(smoothWalkVelocity.y) ||
                 VHVRConfig.WalkSpeedSmoothener() == 0 ||
                 SteamVR_Actions.valheim_Grab.GetState(SteamVR_Input_Sources.Any))
             {
@@ -226,7 +230,7 @@ namespace ValheimVRMod.VRCore.UI
                 else
                 {
                     smoothWalkVelocity =
-                        Vector2.MoveTowards(smoothWalkVelocity, input, Time.deltaTime / VHVRConfig.WalkSpeedSmoothener());
+                        Vector2.MoveTowards(smoothWalkVelocity, input, deltaTime / VHVRConfig.WalkSpeedSmoothener());
                 }
             }
 

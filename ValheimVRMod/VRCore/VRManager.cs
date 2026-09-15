@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine.XR.Management;
 using ValheimVRMod.Utilities;
+using System.Diagnostics;
 
 namespace ValheimVRMod.VRCore
 {
@@ -17,6 +18,31 @@ namespace ValheimVRMod.VRCore
      */
     class VRManager
     {
+        private const string SteamVRAppUri = "steam://rungameid/250820";
+        private static bool steamVrLaunchRequested;
+
+        // r2modman launches Valheim directly and does not guarantee that SteamVR is running.
+        // Ask Steam to start its VR runtime as soon as this profile's VHVR plugin loads, leaving
+        // the startup cinematic time for the compositor and headset drivers to become ready.
+        public static void EnsureSteamVRIsRunning()
+        {
+            if (steamVrLaunchRequested || Process.GetProcessesByName("vrserver").Length > 0)
+            {
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(SteamVRAppUri) { UseShellExecute = true });
+                steamVrLaunchRequested = true;
+                LogInfo("Requested SteamVR startup for this VHVR session.");
+            }
+            catch (System.Exception e)
+            {
+                LogWarning("Could not request SteamVR startup: " + e.Message);
+            }
+        }
+
         public static bool InitializeVR()
         {
             // Need to PreInitialize actions before XRSDK
@@ -116,6 +142,11 @@ namespace ValheimVRMod.VRCore
             string xrManagerAssetPath = Path.Combine(Application.streamingAssetsPath, "xrmanager");
             LogDebug("Loading XR Settings from AssetBundle: " + xrManagerAssetPath);
             var assetBundle = AssetBundle.LoadFromFile(xrManagerAssetPath);
+            if (assetBundle == null)
+            {
+                LogError("Unable to load XR settings AssetBundle: " + xrManagerAssetPath);
+                return null;
+            }
             foreach (var a in assetBundle.LoadAllAssets())
             {
                 LogDebug("XRManagement Asset Loaded: " + a.name);
