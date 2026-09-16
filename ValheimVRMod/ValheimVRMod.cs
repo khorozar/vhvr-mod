@@ -4,6 +4,7 @@ using BepInEx;
 using UnityEngine;
 using ValheimVRMod.VRCore;
 using ValheimVRMod.VRCore.UI;
+using ValheimVRMod.VRCore.Testing;
 using ValheimVRMod.Utilities;
 using ValheimVRMod.Scripts;
 using ValheimVRMod.Patches;
@@ -36,6 +37,10 @@ namespace ValheimVRMod
             }
             Game.isModded = true;
             LogInfo("ValheimVR Mod Awakens!");
+            if (VHVRConfig.TestBridgeEnabled())
+            {
+                gameObject.AddComponent<VRTestBridge>();
+            }
 #if NONVRMODE
             LogInfo("Running non-VR mode companion mod!");
 #endif

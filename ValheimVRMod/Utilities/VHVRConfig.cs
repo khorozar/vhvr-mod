@@ -16,6 +16,8 @@ namespace ValheimVRMod.Utilities
 
         // Immutable Settings
         private static ConfigEntry<bool> vrModEnabled;
+        private static ConfigEntry<bool> testBridgeEnabled;
+        private static ConfigEntry<int> testBridgePort;
         private static ConfigEntry<string> flatScreenMode;
         private static bool? flatScreenModeResolved;
         private static ConfigEntry<bool> useVrControls;
@@ -263,6 +265,11 @@ namespace ValheimVRMod.Utilities
                 "ModEnabled",
                 true,
                 "Used to toggle the mod on and off.");
+            testBridgeEnabled = config.Bind("Debug", "EnableTestBridge", false,
+                "Starts the local-only VR test telemetry bridge. Intended only for the dedicated debug profile.");
+            testBridgePort = config.Bind("Debug", "TestBridgePort", 47373,
+                new ConfigDescription("Local TCP port used by the VR test telemetry bridge.",
+                    new AcceptableValueRange<int>(1024, 65535)));
             flatScreenMode = createImmutableStringSettingWithOverride("Immutable",
                 "flatScreenMode",
                 k_flatScreenModeAuto,
@@ -1119,6 +1126,16 @@ namespace ValheimVRMod.Utilities
                 return commandLineOverrides[vrModEnabled.GetHashCode()];
             }
             return vrModEnabled.Value;
+        }
+
+        public static bool TestBridgeEnabled()
+        {
+            return testBridgeEnabled.Value;
+        }
+
+        public static int TestBridgePort()
+        {
+            return testBridgePort.Value;
         }
 
         public static string GetPreferredHand()
